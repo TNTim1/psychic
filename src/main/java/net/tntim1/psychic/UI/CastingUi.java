@@ -119,11 +119,38 @@ public class CastingUi extends Screen {
         } else {
             String accText = String.format("Accuracy: %.1f%%", accuracy);
             guiGraphics.drawCenteredString(this.font, accText, centerX, 20, 0x00FF00);
+            if (uiState == 1 && !activeNotes.isEmpty()) {
+                boolean allFinished = true;
+                long lastNoteEndTime = 0;
+
+                for (RhythmNote note : activeNotes) {
+                    if (!note.hit && !note.missed) {
+                        allFinished = false;
+                        break;
+                    }
+                    lastNoteEndTime = Math.max(lastNoteEndTime, rhythmStartTime + note.targetTime);
+                }
+
+                // If all notes are processed, wait 500ms after the last note's arrival time to close
+                if (allFinished && System.currentTimeMillis() > lastNoteEndTime + 500) {
+                    this.onClose();
+                    sendCompletionMessage();
+                }
+            }
         }
 
         // --- 3. Render Game Elements ---
         renderButtons(guiGraphics);
         if (uiState == 1) renderRhythmNotes(guiGraphics);
+    }
+    private void sendCompletionMessage() {
+        if (Minecraft.getInstance().player != null) {
+            String color = accuracy >= 90 ? "§6" : (accuracy >= 70 ? "§e" : "§7");
+            Minecraft.getInstance().player.displayClientMessage(
+                    Component.literal(String.format("§b✨ Spell Cast! Final Accuracy: %s%.1f%%", color, accuracy)),
+                    false
+            );
+        }
     }
 
     // --- Updated renderButtons Logic ---
@@ -248,26 +275,26 @@ public class CastingUi extends Screen {
 
             boolean hit = false;
 
+            float hitWindow = 400f; // Must match renderRhythmNotes
+
             for (RhythmNote note : activeNotes) {
-
                 if (note.lane == lane && !note.hit && !note.missed) {
+                    long noteArrival = rhythmStartTime + note.targetTime;
+                    long diff = Math.abs(now - noteArrival);
 
-                    long diff = Math.abs(now - (rhythmStartTime + note.targetTime));
-
-                    if (diff < 250) {
-
+                    if (diff < hitWindow) {
                         note.hit = hit = true;
+                        feedbackExpiry[lane] = now + 200;
+                        feedbackColor[lane] = 0; // Green feedback
 
-                        feedbackExpiry[lane] = now + 200; feedbackColor[lane] = 0;
-
-                        updateAccuracy((int)(100 * (1.0 - diff / 250.0)), 100);
-
+                        // ACCURACY CALCULATION:
+                        // Perfect (0ms diff) = 100 points
+                        // Barely hit (400ms diff) = 0 points
+                        int score = (int)(100 * (1.0f - (diff / hitWindow)));
+                        updateAccuracy(score, 100);
                         break;
-
                     }
-
                 }
-
             }
 
             if (!hit) { feedbackExpiry[lane] = now + 200; feedbackColor[lane] = 1; updateAccuracy(0, 50); }
@@ -396,45 +423,57 @@ public class CastingUi extends Screen {
     private void renderRhythmNotes(GuiGraphics guiGraphics) {
         long now = System.currentTimeMillis();
         float scale = getScale();
-        int r = (int)(4 * scale); // Size of the moving note
+
+        // Increased window: 400ms (Total window is 800ms centered on target)
+        float hitWindow = 400f;
+
+        VertexConsumer consumer = guiGraphics.bufferSource().getBuffer(RenderType.gui());
+        Matrix4f matrix = guiGraphics.pose().last().pose();
 
         for (RhythmNote note : activeNotes) {
             if (note.hit || note.missed) continue;
 
             long noteArrival = rhythmStartTime + note.targetTime;
-            long timeLeft = noteArrival - now;
+            long diff = now - noteArrival; // 0 is perfect, negative is early, positive is late
 
-            // Note is active from 2 seconds before it arrives until 250ms after (despawn)
-            if (timeLeft > 2000) continue;
-            if (timeLeft < -250) {
+            if (diff < -2000) continue;
+            if (diff > hitWindow) { // Note missed
                 note.missed = true;
-                updateAccuracy(0, 100); // Penalty for missing
+                updateAccuracy(0, 100);
                 continue;
             }
 
-            // Calculate progress: 1.0 = center of screen, 0.0 = at the button
-            float progress = timeLeft / 2000f;
+            // --- Logic: Proximity for Glow/Growth ---
+            // 1.0 = Perfect timing, 0.0 = Outside hit window
+            float proximity = Math.max(0, 1.0f - (Math.abs(diff) / hitWindow));
 
-            // Get target button position
+            // --- Visuals: Size & Transparency ---
+            // Base size 3, grows to 8 when correct click is possible
+            float currentRadius = (3.0f + (5.0f * proximity)) * scale;
+            // Transparency similar to lines (0.3f base, up to 0.8f when perfect)
+            float alpha = 0.3f + (0.5f * proximity);
+
+            float progress = Math.max(0, (noteArrival - now) / 2000f);
             float targetX = buttonScreenX(note.lane);
             float targetY = buttonScreenY(note.lane);
-
-            // Get center position
             float centerX = texOriginX() + (TEX_CENTER_X * scale);
             float centerY = texOriginY() + (TEX_CENTER_Y * scale);
 
-            // Interpolate position
-            int curX = (int) (targetX + (centerX - targetX) * progress);
-            int curY = (int) (targetY + (centerY - targetY) * progress);
+            float curX = targetX + (centerX - targetX) * progress;
+            float curY = targetY + (centerY - targetY) * progress;
 
-            // Draw the note using its lane color
             int color = BUTTON_COLORS[note.lane];
-            float red = ((color >> 16) & 0xFF) / 255f;
-            float green = ((color >> 8) & 0xFF) / 255f;
-            float blue = (color & 0xFF) / 255f;
+            float r = ((color >> 16) & 0xFF) / 255f;
+            float g = ((color >> 8) & 0xFF) / 255f;
+            float b = (color & 0xFF) / 255f;
 
-            drawTintedCircle(guiGraphics, curX, curY, r, red, green, blue, 1.0f);
+            // Draw diamond shape for a "magical" feel
+            consumer.vertex(matrix, curX, curY + currentRadius, 10).color(r, g, b, alpha).endVertex();
+            consumer.vertex(matrix, curX + currentRadius, curY, 10).color(r, g, b, alpha).endVertex();
+            consumer.vertex(matrix, curX, curY - currentRadius, 10).color(r, g, b, alpha).endVertex();
+            consumer.vertex(matrix, curX - currentRadius, curY, 10).color(r, g, b, alpha).endVertex();
         }
+        guiGraphics.flush();
     }
     private void updateAccuracy(int p, int m) { this.earnedPoints += p; this.maxPossiblePoints += m; if (maxPossiblePoints > 0) accuracy = (earnedPoints / (float)maxPossiblePoints) * 100; }
 }
