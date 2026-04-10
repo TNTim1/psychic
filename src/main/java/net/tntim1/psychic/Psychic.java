@@ -1,9 +1,15 @@
 package net.tntim1.psychic;
 
 import com.mojang.logging.LogUtils;
+import net.minecraft.client.Minecraft;
+import net.minecraft.commands.Commands;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
+import net.minecraftforge.event.RegisterCommandsEvent;
+import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -12,7 +18,13 @@ import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
+import net.tntim1.psychic.Keybinds.KeyInit;
+import net.tntim1.psychic.Spells.WorldSpellData;
+import net.tntim1.psychic.UI.CastingUi;
 import org.slf4j.Logger;
+
+import java.util.List;
+import java.util.Map;
 
 // The value here should match an entry in the META-INF/mods.toml file
 @Mod(Psychic.MODID)
@@ -27,6 +39,8 @@ public class Psychic
         IEventBus modEventBus = context.getModEventBus();
 
         modEventBus.addListener(this::commonSetup);
+
+        modEventBus.addListener(KeyInit::register);
 
 
         // Register ourselves for server and other game events we are interested in
@@ -52,6 +66,7 @@ public class Psychic
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event)
     {
+
     }
 
     // You can use EventBusSubscriber to automatically register all static methods in the class annotated with @SubscribeEvent
@@ -63,5 +78,24 @@ public class Psychic
         {
 
         }
+    }
+    @Mod.EventBusSubscriber(modid = MODID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
+    public static class ClientForgeEvents {
+        // Inside net.tntim1.psychic.Psychic.ClientForgeEvents
+        @SubscribeEvent
+        public static void onClientTick(TickEvent.ClientTickEvent event) {
+            Minecraft mc = Minecraft.getInstance();
+
+            // ONLY run on the END phase and ONLY if NO screen is open
+            if (event.phase == TickEvent.Phase.END && mc.screen == null) {
+                while (KeyInit.exampleHotKey != null && KeyInit.exampleHotKey.consumeClick()) {
+                    mc.setScreen(new CastingUi());
+                }
+            }
+        }
+    }
+    @SubscribeEvent
+    public void onRegisterCommands(RegisterCommandsEvent event) {
+
     }
 }
