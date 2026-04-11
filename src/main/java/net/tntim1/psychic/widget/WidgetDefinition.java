@@ -46,13 +46,16 @@ public class WidgetDefinition {
      * </ul>
      */
     public final String popupData;
+    public final String id;
 
-    public WidgetDefinition(ResourceLocation iconTexture,
+
+    public WidgetDefinition(String id, ResourceLocation iconTexture,
                             int canvasX, int canvasY,
                             int iconW, int iconH,
                             String label,
                             PopupType popupType,
                             String popupData) {
+        this.id=id;
         this.iconTexture = iconTexture;
         this.canvasX    = canvasX;
         this.canvasY    = canvasY;
@@ -65,15 +68,15 @@ public class WidgetDefinition {
 
     // ── convenience factories ─────────────────────────────────────────────────
 
-    public static WidgetDefinition info(ResourceLocation icon, int x, int y, String label, String text) {
-        return new WidgetDefinition(icon, x, y, 24, 24, label, PopupType.INFO, text);
+    public static WidgetDefinition info(String id, ResourceLocation icon, int x, int y, String label, String text) {
+        return new WidgetDefinition(id, icon, x, y, 24, 24, label, PopupType.INFO, text);
     }
 
-    public static WidgetDefinition list(ResourceLocation icon, int x, int y, String label, String... entries) {
-        return new WidgetDefinition(icon, x, y, 24, 24, label, PopupType.LIST, String.join("\n", entries));
+    public static WidgetDefinition list(String id,ResourceLocation icon, int x, int y, String label, String... entries) {
+        return new WidgetDefinition(id, icon, x, y, 24, 24, label, PopupType.LIST, String.join("\n", entries));
     }
 
-    public static WidgetDefinition image(ResourceLocation icon, int x, int y, String label, ResourceLocation img) {
-        return new WidgetDefinition(icon, x, y, 24, 24, label, PopupType.IMAGE, img.toString());
+    public static WidgetDefinition image(String id,ResourceLocation icon, int x, int y, String label, ResourceLocation img) {
+        return new WidgetDefinition(id, icon, x, y, 24, 24, label, PopupType.IMAGE, img.toString());
     }
 }

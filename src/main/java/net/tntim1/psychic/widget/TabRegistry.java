@@ -26,9 +26,10 @@ public class TabRegistry {
         // -----------------------------------------------------------------
         // Tab 1: Spells
         // -----------------------------------------------------------------
-        TabDefinition spells = new TabDefinition("Spells", 2048, 1024);
+        TabDefinition spells = new TabDefinition("Spells",new ResourceLocation("minecraft", "textures/item/fire_charge.png") , 2048, 1024);
 
         spells.addWidget(WidgetDefinition.info(
+                "spells1",
             new ResourceLocation("minecraft", "textures/item/blaze_powder.png"),
             200, 150,
             "Fireball",
@@ -37,6 +38,7 @@ public class TabRegistry {
         ));
 
         spells.addWidget(WidgetDefinition.list(
+                "spells2",
             new ResourceLocation("minecraft", "textures/item/ender_pearl.png"),
             550, 280,
             "Blink",
@@ -47,6 +49,7 @@ public class TabRegistry {
         ));
 
         spells.addWidget(WidgetDefinition.info(
+                "spells3",
             new ResourceLocation("minecraft", "textures/item/snowball.png"),
             900, 180,
             "Frost Nova",
@@ -54,6 +57,7 @@ public class TabRegistry {
         ));
 
         spells.addWidget(WidgetDefinition.list(
+                "spells4",
             new ResourceLocation("minecraft", "textures/item/lightning_rod.png"),
             1300, 350,
             "Chain Lightning",
@@ -68,9 +72,10 @@ public class TabRegistry {
         // -----------------------------------------------------------------
         // Tab 2: Psychic Powers
         // -----------------------------------------------------------------
-        TabDefinition psychic = new TabDefinition("Psychic", 2048, 1024);
+        TabDefinition psychic = new TabDefinition("Psychic", new ResourceLocation("psychic", "textures/item/liber_chaotica.png"),2048, 1024);
 
         psychic.addWidget(WidgetDefinition.info(
+                "psychic1",
             new ResourceLocation("minecraft", "textures/item/compass.png"),
             250, 200,
             "Mind Probe",
@@ -78,6 +83,7 @@ public class TabRegistry {
         ));
 
         psychic.addWidget(WidgetDefinition.list(
+                "psychic2",
             new ResourceLocation("minecraft", "textures/item/writable_book.png"),
             650, 150,
             "Telekinesis",
@@ -88,6 +94,7 @@ public class TabRegistry {
         ));
 
         psychic.addWidget(WidgetDefinition.info(
+                "psychic3",
             new ResourceLocation("minecraft", "textures/item/amethyst_shard.png"),
             1100, 300,
             "Psychic Shield",
@@ -99,9 +106,10 @@ public class TabRegistry {
         // -----------------------------------------------------------------
         // Tab 3: Lore
         // -----------------------------------------------------------------
-        TabDefinition lore = new TabDefinition("Lore", 1536, 1024);
+        TabDefinition lore = new TabDefinition("Lore", new ResourceLocation("minecraft", "textures/item/enchanted_book.png"),1536, 1024);
 
         lore.addWidget(WidgetDefinition.info(
+                "lore1",
             new ResourceLocation("minecraft", "textures/item/book.png"),
             200, 200,
             "Origin of Psychic Arts",
@@ -110,6 +118,7 @@ public class TabRegistry {
         ));
 
         lore.addWidget(WidgetDefinition.list(
+                "lore2",
             new ResourceLocation("minecraft", "textures/item/map.png"),
             700, 300,
             "Known Factions",
@@ -120,6 +129,7 @@ public class TabRegistry {
         ));
 
         lore.addWidget(WidgetDefinition.info(
+                "lore3",
             new ResourceLocation("minecraft", "textures/item/clock.png"),
             1150, 180,
             "Timeline",

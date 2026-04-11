@@ -1,5 +1,7 @@
 package net.tntim1.psychic.widget;
 
+import net.minecraft.resources.ResourceLocation;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -22,10 +24,12 @@ public class TabDefinition {
     public final int canvasWidth, canvasHeight;
 
     public final List<WidgetDefinition> widgets = new ArrayList<>();
+    public final ResourceLocation icon; // Add this
 
-    public TabDefinition(String name, int canvasWidth, int canvasHeight) {
-        this.name         = name;
-        this.canvasWidth  = canvasWidth;
+    public TabDefinition(String name, ResourceLocation icon, int canvasWidth, int canvasHeight) {
+        this.name = name;
+        this.icon = icon; // Initialize
+        this.canvasWidth = canvasWidth;
         this.canvasHeight = canvasHeight;
     }
 
