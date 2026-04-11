@@ -4,7 +4,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.simple.SimpleChannel;
 
-
 public class ModPackets {
 
     private static final String PROTOCOL = "1";
@@ -18,18 +17,25 @@ public class ModPackets {
     private static int id = 0;
 
     public static void register() {
-        // Client → Server: player clicks ACTIVATE on a widget
+        // Client → Server: activate (unlock) a widget
         CHANNEL.registerMessage(id++,
                 ActivateWidgetPacket.class,
                 ActivateWidgetPacket::encode,
                 ActivateWidgetPacket::decode,
                 ActivateWidgetPacket::handle);
 
-        // Server → Client: server pushes the full unlocked-ID set after a change
+        // Server → Client: push the full unlocked-ID set after any change
         CHANNEL.registerMessage(id++,
                 SyncKnowledgePacket.class,
-               SyncKnowledgePacket::encode,
+                SyncKnowledgePacket::encode,
                 SyncKnowledgePacket::decode,
                 SyncKnowledgePacket::handle);
+
+        // Client → Server: deactivate (lock + cascade) a widget
+        CHANNEL.registerMessage(id++,
+                DeactivateWidgetPacket.class,
+                DeactivateWidgetPacket::encode,
+                DeactivateWidgetPacket::decode,
+                DeactivateWidgetPacket::handle);
     }
 }

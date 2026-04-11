@@ -10,10 +10,10 @@ import java.util.function.Supplier;
 /**
  * Sent from the client to the server when the player clicks ACTIVATE on a widget popup.
  *
- * <p>The server validates the request (add your own gate logic here), then:
+ * <p>The server:
  * <ol>
- *   <li>Unlocks the widget in the player's {@link net.tntim1.psychic.player_data.PsychicData}</li>
- *   <li>Saves it via the capability</li>
+ *   <li>Verifies all dependencies are unlocked via {@code PsychicData.areDependenciesMet()}</li>
+ *   <li>Unlocks the widget</li>
  *   <li>Sends a {@link SyncKnowledgePacket} back so the client GUI updates immediately</li>
  * </ol>
  */
@@ -25,8 +25,6 @@ public class ActivateWidgetPacket {
         this.widgetId = widgetId;
     }
 
-    // ── serialisation ─────────────────────────────────────────────────────────
-
     public static void encode(ActivateWidgetPacket msg, FriendlyByteBuf buf) {
         buf.writeUtf(msg.widgetId);
     }
@@ -35,8 +33,6 @@ public class ActivateWidgetPacket {
         return new ActivateWidgetPacket(buf.readUtf());
     }
 
-    // ── server-side handler ───────────────────────────────────────────────────
-
     public static void handle(ActivateWidgetPacket msg, Supplier<NetworkEvent.Context> ctx) {
         ctx.get().enqueueWork(() -> {
             ServerPlayer player = ctx.get().getSender();
@@ -44,17 +40,17 @@ public class ActivateWidgetPacket {
 
             player.getCapability(PsychicCapability.PSYCHIC_DATA_CAP).ifPresent(data -> {
 
-                // ── GATE CHECK ────────────────────────────────────────────────
-                // Insert your requirements here before allowing the unlock.
-                // Examples:
-                //   if (!data.hasPrerequisite(msg.widgetId)) return;
+                // ── DEPENDENCY GATE (authoritative server check) ──────────────
+                // Rejects the packet if the client somehow sent it while deps
+                // weren't met — prevents cheating / race conditions.
+                if (!data.areDependenciesMet(msg.widgetId)) return;
+
+                // ── ADDITIONAL GATE HOOKS ─────────────────────────────────────
+                // Add your own checks here, e.g.:
                 //   if (data.getMana() < cost) return;
-                // For now every click unlocks freely.
                 // ─────────────────────────────────────────────────────────────
 
                 data.unlock(msg.widgetId);
-
-                // Push the updated set back to this client
                 SyncKnowledgePacket.sendToPlayer(player, data);
             });
         });

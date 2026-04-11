@@ -1,63 +1,64 @@
 package net.tntim1.psychic.screen;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import com.mojang.blaze3d.vertex.Tesselator;
+import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.tntim1.psychic.network.ActivateWidgetPacket;
+import net.tntim1.psychic.network.DeactivateWidgetPacket;
 import net.tntim1.psychic.network.ModPackets;
 import net.tntim1.psychic.player_data.ClientKnowledge;
-import net.tntim1.psychic.widget.PopupType;
 import net.tntim1.psychic.widget.TabDefinition;
 import net.tntim1.psychic.widget.TabRegistry;
 import net.tntim1.psychic.widget.WidgetDefinition;
+import org.joml.Matrix4f;
 import org.lwjgl.glfw.GLFW;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
- * The Atlas Codex fullscreen GUI.
+ * Atlas Codex GUI with full dependency support.
  *
- * <p>Layout:
- * <pre>
- *  ┌─────────────────────────────────────────────────────┐
- *  │  [Tab A]  [Tab B]  [Tab C]          [×]  (top bar) │
- *  ├─────────────────────────────────────────────────────┤
- *  │                                                     │
- *  │        scrollable + zoomable canvas                 │
- *  │                                                     │
- *  └─────────────────────────────────────────────────────┘
- * </pre>
- *
- * <p>Controls:
+ * <h3>Widget states</h3>
  * <ul>
- *   <li>Right-drag or Middle-drag → pan</li>
- *   <li>Scroll wheel              → zoom (centres on cursor)</li>
- *   <li>+ / - keys               → zoom</li>
- *   <li>Arrow keys               → pan</li>
- *   <li>Left-click widget        → open popup</li>
- *   <li>Left-click outside popup → close popup</li>
- *   <li>Esc                      → close popup then close GUI</li>
+ *   <li><b>Locked</b>   – one or more dependencies not yet met.
+ *       Widget is drawn with a lock icon tint. Clicking it does nothing.</li>
+ *   <li><b>Available</b> – all dependencies met, but not yet activated.
+ *       Popup opens; ACTIVATE button is enabled.</li>
+ *   <li><b>Unlocked</b>  – activated. Popup shows "UNLOCKED" (green).</li>
  * </ul>
+ *
+ * <h3>Dependency lines</h3>
+ * Lines are drawn from the centre of each dependency widget to the centre of
+ * the widget that depends on it. Colour reflects the dependency's unlock state.
  */
 public class AtlasCodexScreen extends Screen {
+
+    // ── textures ──────────────────────────────────────────────────────────────
     private static final ResourceLocation WIDGET_BG_INACTIVE          = new ResourceLocation("psychic", "textures/gui/widgets/widget_background_inactive.png");
     private static final ResourceLocation WIDGET_BG_INACTIVE_SELECTED = new ResourceLocation("psychic", "textures/gui/widgets/widget_background_inactive_selected.png");
     private static final ResourceLocation WIDGET_BG_ACTIVE            = new ResourceLocation("psychic", "textures/gui/widgets/widget_background_active.png");
     private static final ResourceLocation WIDGET_BG_ACTIVE_SELECTED   = new ResourceLocation("psychic", "textures/gui/widgets/widget_background_active_selected.png");
-
+    private static final ResourceLocation WIDGET_BG_LOCKED  = new ResourceLocation("psychic", "textures/gui/widgets/widget_background_locked.png");
     // ── palette ───────────────────────────────────────────────────────────────
-    private static final int C_BORDER        = 0xFFd4a9a2;
-    private static final int C_ACCENT        = 0xFF392420;
-    private static final int C_TAB_INACTIVE  = 0xFF000000;
-    private static final int C_TAB_HOVER     = 0xFFd18a7d;
-    private static final int C_CANVAS_BG     = 0xFFFFFFFF;
-    private static final int C_POPUP_BG      = 0xFFd4a9a2;
-    private static final int C_POPUP_BORDER  = 0xFF392420;
-    private static final int C_TEXT          = 0xFF000000;
-    private static final int C_TEXT_DIM      = 0xFF392420;
+    private static final int C_BORDER         = 0xFFd4a9a2;
+    private static final int C_ACCENT         = 0xFF392420;
+    private static final int C_TAB_INACTIVE   = 0xFF000000;
+    private static final int C_TAB_HOVER      = 0xFFd18a7d;
+    private static final int C_CANVAS_BG      = 0xFF333333;
+    private static final int C_POPUP_BG       = 0xFFd4a9a2;
+    private static final int C_POPUP_BORDER   = 0xFF392420;
+    private static final int C_TEXT           = 0xFF000000;
+    private static final int C_TEXT_DIM       = 0xFF000000;
 
     // ── layout ───────────────────────────────────────────────────────────────
     private static final int TAB_H     = 26;
@@ -80,7 +81,7 @@ public class AtlasCodexScreen extends Screen {
     private int     hoveredWidget = -1;
     private PopupState popup = null;
 
-    // ── derived layout (recalculated each frame) ──────────────────────────────
+    // ── derived layout ────────────────────────────────────────────────────────
     private int frameX, frameY, frameW, frameH;
     private int canvasX, canvasY, canvasW, canvasH;
 
@@ -93,10 +94,26 @@ public class AtlasCodexScreen extends Screen {
         super(Component.literal("Atlas Codex"));
     }
 
+    // Track which widgets were already unlocked when we opened the GUI
+    private final java.util.Set<String> alreadySeenUnlocked = new java.util.HashSet<>();
+    // Global timer for the "new" connection growth
+    private long openTime;
+
     @Override
     protected void init() {
         super.init();
         recalcLayout();
+        this.openTime = System.currentTimeMillis();
+
+        // Capture the state of knowledge AT THE MOMENT the screen is opened
+        this.alreadySeenUnlocked.clear();
+        for (TabDefinition tab : tabs) {
+            for (WidgetDefinition w : tab.widgets) {
+                if (ClientKnowledge.isUnlocked(w.id)) {
+                    alreadySeenUnlocked.add(w.id);
+                }
+            }
+        }
     }
 
     private void recalcLayout() {
@@ -121,13 +138,14 @@ public class AtlasCodexScreen extends Screen {
         recalcLayout();
         renderBackground(gfx);
 
+        // Outer frame
         gfx.fill(frameX, frameY, frameX + frameW, frameY + frameH, C_BORDER);
         drawBorder(gfx, frameX, frameY, frameW, frameH, 2, C_ACCENT);
 
+        // Section title
         if (!tabs.isEmpty()) {
             String title = tabs.get(activeTab).name.toUpperCase();
             gfx.drawString(font, title, frameX + 12, frameY + 12, C_ACCENT, false);
-
             int lineY = frameY + HEADER_H + 2;
             gfx.fill(frameX + 10, lineY, frameX + frameW - 10, lineY + 1, C_TEXT);
         }
@@ -143,7 +161,6 @@ public class AtlasCodexScreen extends Screen {
 
     private void renderTabBar(GuiGraphics gfx, int mx, int my) {
         int tabW = 24, tabH = 24, spacing = 2;
-
         for (int i = 0; i < tabs.size(); i++) {
             TabDefinition tab = tabs.get(i);
             int tx = frameX + frameW;
@@ -153,13 +170,9 @@ public class AtlasCodexScreen extends Screen {
             boolean hovered = !active && mx >= tx && mx < tx + tabW && my >= ty && my < ty + tabH;
 
             int bg = active ? C_BORDER : (hovered ? C_TAB_HOVER : C_TAB_INACTIVE);
-
             gfx.fill(tx, ty, tx + tabW, ty + tabH, bg);
             drawBorder(gfx, tx, ty, tabW, tabH, active ? 2 : 1, C_ACCENT);
-
-            if (active) {
-                gfx.fill(tx - 5, ty + 2, tx + tabW - 2, ty + tabH - 2, bg);
-            }
+            if (active) gfx.fill(tx - 5, ty + 2, tx + tabW - 2, ty + tabH - 2, bg);
 
             RenderSystem.setShaderTexture(0, tab.icon);
             RenderSystem.enableBlend();
@@ -174,9 +187,20 @@ public class AtlasCodexScreen extends Screen {
         gfx.fill(canvasX, canvasY, canvasX + canvasW, canvasY + canvasH, C_CANVAS_BG);
         enableScissor(canvasX, canvasY, canvasW, canvasH);
 
-        hoveredWidget = -1;
         if (!tabs.isEmpty()) {
             TabDefinition tab = tabs.get(activeTab);
+            Map<String, int[]> centres = buildCentreMap(tab);
+
+            // --- STEP 1: DRAW ALL LINES (Gray and Animated) ---
+            // By calling this first, everything inside this method stays behind the widgets
+            renderDependencyLines(gfx, tab, centres);
+
+
+            // Finalize the line buffer before starting widgets
+            gfx.flush();
+
+            // --- STEP 2: DRAW ALL WIDGETS ---
+            hoveredWidget = -1;
             for (int i = 0; i < tab.widgets.size(); i++) {
                 WidgetDefinition w = tab.widgets.get(i);
                 int wx = canvasToScreenX(w.canvasX);
@@ -184,11 +208,14 @@ public class AtlasCodexScreen extends Screen {
                 int ww = Math.max(1, (int)(w.iconW * zoom));
                 int wh = Math.max(1, (int)(w.iconH * zoom));
                 int pad = 4;
-                boolean hov = popup == null
+
+                boolean depsOk = ClientKnowledge.areDependenciesMet(w.id);
+                boolean hov    = popup == null && depsOk
                         && mx >= wx - pad && mx < wx + ww + pad
                         && my >= wy - pad && my < wy + wh + pad;
                 if (hov) hoveredWidget = i;
-                renderWidget(gfx, w, wx, wy, ww, wh, hov);
+
+                renderWidget(gfx, w, wx, wy, ww, wh, hov, depsOk);
             }
 
             if (hoveredWidget >= 0) {
@@ -199,21 +226,208 @@ public class AtlasCodexScreen extends Screen {
         disableScissor();
     }
 
+    /**
+     * Builds a map of widgetId → [screenCentreX, screenCentreY] for every
+     * widget in the current tab, used to draw dependency lines.
+     */
+    private Map<String, int[]> buildCentreMap(TabDefinition tab) {
+        Map<String, int[]> map = new HashMap<>();
+        for (WidgetDefinition w : tab.widgets) {
+            int ww = Math.max(1, (int)(w.iconW * zoom));
+            int wh = Math.max(1, (int)(w.iconH * zoom));
+            int cx = canvasToScreenX(w.canvasX) + ww / 2;
+            int cy = canvasToScreenY(w.canvasY) + wh / 2;
+            map.put(w.id, new int[]{cx, cy});
+        }
+        return map;
+    }
+
+    /**
+     * Draws lines from each dependency's centre to the dependent widget's centre.
+     * Green = dependency is unlocked, Red = not yet unlocked.
+     */
+    /**
+     * Renders animated, scaling gradient lines for dependencies.
+     */
+
+    /**
+     * Renders animated, scaling gradient lines for dependencies.
+     * Draws a base grey line for all connections, and an animated orange line for unlocked ones.
+     */
+    private void renderDependencyLines(GuiGraphics gfx, TabDefinition tab, Map<String, int[]> centres) {
+        long currentTime = System.currentTimeMillis();
+        float animationDuration = 1500f;
+        float growthProgress = Mth.clamp((currentTime - openTime) / animationDuration, 0f, 1f);
+
+        // PASS 1: The Grey "Inactive" Lines (Static)
+        for (WidgetDefinition w : tab.widgets) {
+            if (!w.hasDependencies()) continue;
+            int[] to = centres.get(w.id);
+            if (to == null) continue;
+
+            for (String depId : w.dependencies) {
+                int[] from = centres.get(depId);
+                if (from == null) continue;
+
+                // Simple static line: 1 segment, 0 jitter
+                drawGradientLine(gfx, from[0], from[1], to[0], to[1],
+                        0xFF999999, 0xFF999999, 1.0f, 0.0f, 0.5f,
+                        0f, 1);
+            }
+        }
+
+        // PASS 2: The Animated "Active" Lines (Jittery Energy)
+        for (WidgetDefinition w : tab.widgets) {
+            if (!w.hasDependencies()) continue;
+            int[] to = centres.get(w.id);
+            if (to == null) continue;
+
+            for (String depId : w.dependencies) {
+                int[] from = centres.get(depId);
+                if (from == null) continue;
+
+                if (ClientKnowledge.isUnlocked(depId)) {
+                    // Determine animation progress
+                    boolean isNew = !alreadySeenUnlocked.contains(depId);
+                    float progress = isNew ? growthProgress : 1.0f;
+
+                    float x2_anim = from[0] + (to[0] - from[0]) * progress;
+                    float y2_anim = from[1] + (to[1] - from[1]) * progress;
+
+                    // Calculate distance-based segments
+                    float dx = to[0] - from[0];
+                    float dy = to[1] - from[1];
+                    float actualLen = Mth.sqrt(dx * dx + dy * dy);
+
+                    // Scale segments based on length: approx 1 segment per 10 pixels, min 4
+                    int segments = Math.max(4, (int)(actualLen / 10f));
+
+                    // The Energy Line
+                    drawGradientLine(gfx, from[0], from[1], x2_anim, y2_anim,
+                            0xAACC5500, 0xAAFFD700, 2.2f, 0.0f, 1.0f,
+                            6.0f, segments);
+
+                    // Inner  Core
+                    drawGradientLine(gfx, from[0], from[1], x2_anim, y2_anim,
+                            0xFFFFFFFF, 0xAAFFD700, 0.8f, 0.0f, 0.7f,
+                            10.0f, segments);
+                }
+            }
+        }
+    }
+
+    private void drawGradientLine(GuiGraphics gfx, float x1, float y1, float x2, float y2,
+                                  int color1, int color2, float thicknessMult, float z, float alphaMult,
+                                  float jitter, int segments) {
+
+        if (Math.abs(x1 - x2) < 0.1f && Math.abs(y1 - y2) < 0.1f) return;
+
+        Matrix4f matrix = gfx.pose().last().pose();
+        // Using the standard GUI render type for transparency support
+        com.mojang.blaze3d.vertex.VertexConsumer consumer = gfx.bufferSource().getBuffer(net.minecraft.client.renderer.RenderType.gui());
+
+        // Color extraction
+        float a1 = ((color1 >> 24) & 0xFF) / 255f * alphaMult;
+        float r1 = ((color1 >> 16) & 0xFF) / 255f;
+        float g1 = ((color1 >> 8) & 0xFF) / 255f;
+        float b1 = (color1 & 0xFF) / 255f;
+
+        float a2 = ((color2 >> 24) & 0xFF) / 255f * alphaMult;
+        float r2 = ((color2 >> 16) & 0xFF) / 255f;
+        float g2 = ((color2 >> 8) & 0xFF) / 255f;
+        float b2 = (color2 & 0xFF) / 255f;
+
+        float dx = x2 - x1;
+        float dy = y2 - y1;
+        float len = (float) Math.sqrt(dx * dx + dy * dy);
+
+        // Normal vectors for calculating thickness offsets
+        float nx = -(dy / len);
+        float ny = (dx / len);
+
+        float baseThickness = thicknessMult * zoom;
+
+        // Use a faster seed (approx 33 FPS) for erratic energy flickering
+        long frameSeed = (System.currentTimeMillis() / 30);
+        java.util.Random rand = new java.util.Random();
+
+        float lastX = x1;
+        float lastY = y1;
+        float lastThickness = baseThickness;
+
+        for (int i = 1; i <= segments; i++) {
+            float t = (float) i / segments;
+
+            // Linear interpolation target
+            float nextX = x1 + dx * t;
+            float nextY = y1 + dy * t;
+            float currentThickness = baseThickness;
+
+            // Apply chaotic displacement to intermediate points
+            if (i < segments) {
+                // Seed unique to this specific segment and time frame
+                rand.setSeed(frameSeed + i + (long)(x1 * 7919));
+
+                // Sharp jitter: Snap the vertex to a random offset
+                float intensity = rand.nextFloat() * jitter * zoom;
+                nextX += (rand.nextFloat() - 0.5f) * intensity;
+                nextY += (rand.nextFloat() - 0.5f) * intensity;
+
+                // Width jitter: Makes the beam pulse and look unstable
+                currentThickness *= (0.6f + rand.nextFloat() * 0.8f);
+            }
+
+            // Lerp colors across the segments
+            float currR = Mth.lerp(t, r1, r2);
+            float currG = Mth.lerp(t, g1, g2);
+            float currB = Mth.lerp(t, b1, b2);
+            float currA = Mth.lerp(t, a1, a2);
+
+            // Calculate segment offsets
+            float offX1 = nx * (lastThickness / 2f);
+            float offY1 = ny * (lastThickness / 2f);
+            float offX2 = nx * (currentThickness / 2f);
+            float offY2 = ny * (currentThickness / 2f);
+
+            // Quad composition for this segment
+            consumer.vertex(matrix, lastX - offX1, lastY - offY1, z).color(currR, currG, currB, currA).endVertex();
+            consumer.vertex(matrix, lastX + offX1, lastY + offY1, z).color(currR, currG, currB, currA).endVertex();
+            consumer.vertex(matrix, nextX + offX2, nextY + offY2, z).color(currR, currG, currB, currA).endVertex();
+            consumer.vertex(matrix, nextX - offX2, nextY - offY2, z).color(currR, currG, currB, currA).endVertex();
+
+            // Pass variables to the next segment iteration
+            lastX = nextX;
+            lastY = nextY;
+            lastThickness = currentThickness;
+        }
+    }
+
+
+
     private void renderWidget(GuiGraphics gfx, WidgetDefinition w,
-                              int wx, int wy, int ww, int wh, boolean hovered) {
+                              int wx, int wy, int ww, int wh,
+                              boolean hovered, boolean depsOk) {
         int pad = (int)(4 * zoom);
         int bgX = wx - pad, bgY = wy - pad;
         int bgW = ww + (pad * 2), bgH = wh + (pad * 2);
 
         boolean isUnlocked = ClientKnowledge.isUnlocked(w.id);
-        ResourceLocation bgTexture = isUnlocked
-                ? (hovered ? WIDGET_BG_ACTIVE_SELECTED   : WIDGET_BG_ACTIVE)
-                : (hovered ? WIDGET_BG_INACTIVE_SELECTED : WIDGET_BG_INACTIVE);
+
+        // Choose background texture: locked widgets always use inactive variant
+        ResourceLocation bgTexture;
+        if (!depsOk) {
+            bgTexture = WIDGET_BG_LOCKED;
+        } else if (isUnlocked) {
+            bgTexture = hovered ? WIDGET_BG_ACTIVE_SELECTED : WIDGET_BG_ACTIVE;
+        } else {
+            bgTexture = hovered ? WIDGET_BG_INACTIVE_SELECTED : WIDGET_BG_INACTIVE;
+        }
 
         RenderSystem.setShaderTexture(0, bgTexture);
         RenderSystem.enableBlend();
         gfx.blit(bgTexture, bgX, bgY, 0, 0, bgW, bgH, bgW, bgH);
 
+        // Icon
         RenderSystem.setShaderTexture(0, w.iconTexture);
         gfx.blit(w.iconTexture, wx, wy, 0, 0, ww, wh, ww, wh);
 
@@ -226,7 +440,11 @@ public class AtlasCodexScreen extends Screen {
         if (popup == null) return;
         WidgetDefinition w = popup.widget;
 
-        int popW = 210, popH = 150;
+        boolean isUnlocked  = ClientKnowledge.isUnlocked(w.id);
+        boolean depsOk      = ClientKnowledge.areDependenciesMet(w.id);
+        List<String> missing = ClientKnowledge.getMissingDependencyLabels(w.id);
+
+        int popW = 210, popH = 160;   // slightly taller to fit missing-deps text
         int px = Mth.clamp(popup.originX + 18, frameX + 4, frameX + frameW - popW - 4);
         int py = Mth.clamp(popup.originY - popH / 2, frameY + TAB_H + 4, frameY + frameH - popH - 4);
 
@@ -253,32 +471,57 @@ public class AtlasCodexScreen extends Screen {
         boolean closeHov = mx >= px + popW - 14 && mx < px + popW && my >= py && my < py + 20;
         gfx.drawString(font, "×", px + popW - 10, py + 6, closeHov ? 0x000000 : C_TEXT, false);
 
-        // Body
-        int bx = px + 6, by = py + 24, bw = popW - 12, bh = popH - 28;
+        // Body — either normal content or a "missing deps" explanation
+        int bx = px + 6, by = py + 24, bw = popW - 12, bh = popH - 50;
         int lh = font.lineHeight + 2;
-        switch (w.popupType) {
-            case INFO   -> renderBodyInfo(gfx, w.popupData, bx, by, bw, bh, lh);
-            case LIST   -> renderBodyList(gfx, w.popupData, bx, by, bw, bh, lh);
-            case IMAGE  -> renderBodyImage(gfx, w.popupData, bx, by, bw, bh);
-            case CUSTOM -> gfx.drawString(font, "[custom:" + w.popupData + "]", bx, by, C_TEXT_DIM, false);
+
+        if (!depsOk) {
+            // Show what's still needed
+            gfx.drawString(font, "§cRequires:", bx, by, C_TEXT, false);
+            int cy = by + lh;
+            for (String dep : missing) {
+                if (cy + lh > by + bh) break;
+                gfx.fill(bx, cy + lh / 2 - 1, bx + 3, cy + lh / 2 + 2, 0xFFCC4444);
+                gfx.drawString(font, dep, bx + 8, cy, 0xFFCC4444, false);
+                cy += lh;
+            }
+        } else {
+            switch (w.popupType) {
+                case INFO   -> renderBodyInfo(gfx, w.popupData, bx, by, bw, bh, lh);
+                case LIST   -> renderBodyList(gfx, w.popupData, bx, by, bw, bh, lh);
+                case IMAGE  -> renderBodyImage(gfx, w.popupData, bx, by, bw, bh);
+                case CUSTOM -> gfx.drawString(font, "[custom:" + w.popupData + "]", bx, by, C_TEXT_DIM, false);
+            }
         }
 
-        // ── ACTIVATE button ───────────────────────────────────────────────────
+        // ── ACTIVATE / LOCKED button ──────────────────────────────────────────
         int btnW = 80, btnH = 16;
         int btnX = px + (popW - btnW) / 2;
         int btnY = py + popH - 22;
 
-        boolean isUnlocked = ClientKnowledge.isUnlocked(w.id);
-        boolean btnHov     = mx >= btnX && mx < btnX + btnW && my >= btnY && my < btnY + btnH;
+        boolean btnHov = mx >= btnX && mx < btnX + btnW && my >= btnY && my < btnY + btnH;
 
-        int btnCol = isUnlocked ? 0xFF55FF55 : (btnHov ? 0xFFc4a080 : C_BORDER);
+        String btnText;
+        int    btnCol;
+
+        if (isUnlocked) {
+            btnText = "UNLOCKED";
+            btnCol  = 0xFF55FF55;
+        } else if (!depsOk) {
+            btnText = "LOCKED";
+            btnCol  = 0xFF666666;   // grey — not clickable
+        } else {
+            btnText = "ACTIVATE";
+            btnCol  = btnHov ? 0xFFc4a080 : C_BORDER;
+        }
+
         gfx.fill(btnX, btnY, btnX + btnW, btnY + btnH, btnCol);
         drawBorder(gfx, btnX, btnY, btnW, btnH, 1, C_ACCENT);
-
-        String btnText  = isUnlocked ? "UNLOCKED" : "ACTIVATE";
-        int    textW    = font.width(btnText);
+        int textW = font.width(btnText);
         gfx.drawString(font, btnText, btnX + (btnW - textW) / 2, btnY + 4, C_ACCENT, false);
     }
+
+    // ── Popup body renderers ──────────────────────────────────────────────────
 
     private void renderBodyInfo(GuiGraphics gfx, String text,
                                 int x, int y, int maxW, int maxH, int lh) {
@@ -324,9 +567,9 @@ public class AtlasCodexScreen extends Screen {
     @Override
     public boolean mouseClicked(double mx, double my, int btn) {
 
-        // ── Popup is open → handle interactions inside it ─────────────────────
+        // ── Popup is open ─────────────────────────────────────────────────────
         if (popup != null) {
-            int popW = 210, popH = 150;
+            int popW = 210, popH = 160;
             int px = Mth.clamp(popup.originX + 18, frameX + 4, frameX + frameW - popW - 4);
             int py = Mth.clamp(popup.originY - popH / 2, frameY + TAB_H + 4, frameY + frameH - popH - 4);
 
@@ -335,10 +578,15 @@ public class AtlasCodexScreen extends Screen {
             int btnY = py + popH - 22;
 
             if (mx >= btnX && mx < btnX + btnW && my >= btnY && my < btnY + btnH) {
-                // Only send the packet if not already unlocked
-                if (!ClientKnowledge.isUnlocked(popup.widget.id)) {
-                    ModPackets.CHANNEL.sendToServer(new ActivateWidgetPacket(popup.widget.id));
+                String id        = popup.widget.id;
+                boolean unlocked = ClientKnowledge.isUnlocked(id);
+                boolean depsOk   = ClientKnowledge.areDependenciesMet(id);
+
+                if (!unlocked && depsOk) {
+                    // Client already verified deps — server will double-check
+                    ModPackets.CHANNEL.sendToServer(new ActivateWidgetPacket(id));
                 }
+                // Clicking UNLOCKED or LOCKED does nothing
                 return true;
             }
 
@@ -364,7 +612,7 @@ public class AtlasCodexScreen extends Screen {
             }
         }
 
-        // ── Drag start (right / middle) ───────────────────────────────────────
+        // ── Drag start ────────────────────────────────────────────────────────
         if ((btn == GLFW.GLFW_MOUSE_BUTTON_RIGHT || btn == GLFW.GLFW_MOUSE_BUTTON_MIDDLE)
                 && isInCanvas((int)mx, (int)my)) {
             dragging = true; dragLastX = mx; dragLastY = my;
@@ -379,6 +627,8 @@ public class AtlasCodexScreen extends Screen {
                     int ww = Math.max(1, (int)(w.iconW * zoom)), wh = Math.max(1, (int)(w.iconH * zoom));
                     int pad = 4;
                     if (mx >= wx - pad && mx < wx + ww + pad && my >= wy - pad && my < wy + wh + pad) {
+                        // Open popup regardless of dep state — the popup itself
+                        // explains what's missing when deps aren't met.
                         popup = new PopupState(w, (int)mx, (int)my);
                         return true;
                     }
