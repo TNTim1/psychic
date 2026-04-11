@@ -158,7 +158,6 @@ public class CastingUi extends Screen {
         int r = buttonScreenRadius();
         long now = System.currentTimeMillis();
 
-        // 1. Draw Lines (Z = -5)
         if (uiState == 0) {
             for (LineConnection line : completedLines) {
                 float x1 = (float) buttonScreenX(line.startLane);
@@ -171,15 +170,29 @@ public class CastingUi extends Screen {
 
                 long elapsed = now - line.timestamp;
 
+                // --- The Surge (Lead Tip) ---
                 float leadProgress = Math.min(1.0f, elapsed / 300f);
                 float leadCurX = x1 + (x2 - x1) * leadProgress;
                 float leadCurY = y1 + (y2 - y1) * leadProgress;
-                drawGradientLine(guiGraphics, x1, y1, leadCurX, leadCurY, 0xFFFFFFFF, 0xFFFFFFFF, 0.5f, -5.0f, 0.3f);
 
-                float mainProgress = Math.min(1.0f, elapsed / 800f);
+                // Calculate segments based on length so the jitter stays consistent
+                float dist = (float) Math.sqrt(Math.pow(leadCurX - x1, 2) + Math.pow(leadCurY - y1, 2));
+                int segments = Math.max(2, (int)(dist / 16f));
+
+                // Draw the white "Spark" head (more jitter, thin)
+                drawGradientLine(guiGraphics, x1, y1, leadCurX, leadCurY,
+                        0xFFFFFFFF, 0xFFFFFFFF, 0.8f, -4.5f, 0.5f,
+                        1.0f, segments);
+
+                // --- The Main Flow ---
+                float mainProgress = Math.min(1.0f, elapsed / 600f);
                 float mainCurX = x1 + (x2 - x1) * mainProgress;
                 float mainCurY = y1 + (y2 - y1) * mainProgress;
-                drawGradientLine(guiGraphics, x1, y1, mainCurX, mainCurY, colorStart, colorEnd, 1.5f, -4.0f, 0.7f);
+
+                // Slightly less jitter for the main body
+                drawGradientLine(guiGraphics, x1, y1, mainCurX, mainCurY,
+                        colorStart, colorEnd, 2.0f, -4.0f, 0.7f,
+                        0.5f, segments);
             }
         }
 
@@ -228,41 +241,99 @@ public class CastingUi extends Screen {
         }
     }
 
-    private void drawGradientLine(GuiGraphics guiGraphics, float x1, float y1, float x2, float y2, int color1, int color2, float thicknessMult, float z, float alphaMult) {
+    private void drawGradientLine(GuiGraphics guiGraphics, float x1, float y1, float x2, float y2,
+                                  int color1, int color2, float thicknessMult, float z, float alphaMult,
+                                  float jitter, int segments) {
+
         if (Math.abs(x1 - x2) < 0.01f && Math.abs(y1 - y2) < 0.01f) return;
 
         Matrix4f matrix = guiGraphics.pose().last().pose();
+        VertexConsumer consumer = guiGraphics.bufferSource().getBuffer(RenderType.gui());
 
-        // Extract RGBA for Start Color
+        // --- Color Extraction ---
         float r1 = ((color1 >> 16) & 0xFF) / 255f;
         float g1 = ((color1 >> 8) & 0xFF) / 255f;
         float b1 = (color1 & 0xFF) / 255f;
         float a1 = (((color1 >> 24) & 0xFF) / 255f) * alphaMult;
 
-        // Extract RGBA for End Color
         float r2 = ((color2 >> 16) & 0xFF) / 255f;
         float g2 = ((color2 >> 8) & 0xFF) / 255f;
         float b2 = (color2 & 0xFF) / 255f;
         float a2 = (((color2 >> 24) & 0xFF) / 255f) * alphaMult;
 
+        // --- Math Prep ---
         float dx = x2 - x1;
         float dy = y2 - y1;
         float len = (float) Math.sqrt(dx * dx + dy * dy);
 
-        float thickness = thicknessMult * getScale();
-        float nx = -dy / len * (thickness / 2f);
-        float ny = dx / len * (thickness / 2f);
+        float nx = -dy / len;
+        float ny = dx / len;
+        float baseThickness = thicknessMult * getScale();
 
-        VertexConsumer consumer = guiGraphics.bufferSource().getBuffer(RenderType.gui());
+        // High-speed flicker seed
+        long frameSeed = (System.currentTimeMillis() / 30);
+        java.util.Random rand = new java.util.Random();
 
-        // Start side vertices (Color 1)
-        consumer.vertex(matrix, x1 - nx, y1 - ny, z).color(r1, g1, b1, a1).endVertex();
-        consumer.vertex(matrix, x1 + nx, y1 + ny, z).color(r1, g1, b1, a1).endVertex();
+        // --- Loop State Initialization ---
+        float lastX = x1;
+        float lastY = y1;
+        float lastThickness = baseThickness;
 
-        // End side vertices (Color 2)
-        consumer.vertex(matrix, x2 + nx, y2 + ny, z).color(r2, g2, b2, a2).endVertex();
-        consumer.vertex(matrix, x2 - nx, y2 - ny, z).color(r2, g2, b2, a2).endVertex();
+        // Starting colors for the very first segment
+        float lastR = r1;
+        float lastG = g1;
+        float lastB = b1;
+        float lastA = a1;
 
+        for (int i = 1; i <= segments; i++) {
+            float t = (float) i / segments;
+
+            // Linear targets
+            float nextX = x1 + dx * t;
+            float nextY = y1 + dy * t;
+            float currentThickness = baseThickness;
+
+            // Apply Jitter to intermediate points
+            if (i < segments) {
+                rand.setSeed(frameSeed + i + (long)(x1 * 31));
+
+                float intensity = rand.nextFloat() * jitter * getScale();
+                nextX += (rand.nextFloat() - 0.5f) * intensity;
+                nextY += (rand.nextFloat() - 0.5f) * intensity;
+
+                // Width jitter for the pulsing effect
+                currentThickness *= (0.7f + rand.nextFloat() * 0.6f);
+            }
+
+            // Calculate colors for the END of this segment
+            float currR = r1 + (r2 - r1) * t;
+            float currG = g1 + (g2 - g1) * t;
+            float currB = b1 + (b2 - b1) * t;
+            float currA = a1 + (a2 - a1) * t;
+
+            // Offset positions for thickness
+            float offX1 = nx * (lastThickness / 2f);
+            float offY1 = ny * (lastThickness / 2f);
+            float offX2 = nx * (currentThickness / 2f);
+            float offY2 = ny * (currentThickness / 2f);
+
+            // --- Render Quad Segment ---
+            // By using 'last' colors for the start and 'curr' colors for the end,
+            // the GPU creates a smooth gradient across the segment.
+            consumer.vertex(matrix, lastX - offX1, lastY - offY1, z).color(lastR, lastG, lastB, lastA).endVertex();
+            consumer.vertex(matrix, lastX + offX1, lastY + offY1, z).color(lastR, lastG, lastB, lastA).endVertex();
+            consumer.vertex(matrix, nextX + offX2, nextY + offY2, z).color(currR, currG, currB, currA).endVertex();
+            consumer.vertex(matrix, nextX - offX2, nextY - offY2, z).color(currR, currG, currB, currA).endVertex();
+
+            // --- Advance State ---
+            lastX = nextX;
+            lastY = nextY;
+            lastThickness = currentThickness;
+            lastR = currR;
+            lastG = currG;
+            lastB = currB;
+            lastA = currA;
+        }
         guiGraphics.flush();
     }
 
@@ -450,8 +521,7 @@ public class CastingUi extends Screen {
             // --- Visuals: Size & Transparency ---
             // Base size 3, grows to 8 when correct click is possible
             float currentRadius = (3.0f + (5.0f * proximity)) * scale;
-            // Transparency similar to lines (0.3f base, up to 0.8f when perfect)
-            float alpha = 0.3f + (0.5f * proximity);
+            float alpha = 0.7f + (0.3f * proximity);
 
             float progress = Math.max(0, (noteArrival - now) / 2000f);
             float targetX = buttonScreenX(note.lane);

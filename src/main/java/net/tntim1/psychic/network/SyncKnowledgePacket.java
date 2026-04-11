@@ -61,12 +61,7 @@ public class SyncKnowledgePacket {
      * @param data   the authoritative server-side data for that player
      */
     public static void sendToPlayer(ServerPlayer player, PsychicData data) {
-        // Build a snapshot of the ID set and ship it
-        Set<String> snapshot = data.getUnlockedIds();   // see PsychicData changes below
-        ModPackets.CHANNEL.sendTo(
-                new SyncKnowledgePacket(snapshot),
-                player.connection.connection,
-                NetworkDirection.PLAY_TO_CLIENT
-        );
+        // Use the helper method from ModPackets instead of ModPackets.CHANNEL
+        ModPackets.sendToPlayer(new SyncKnowledgePacket(data.getUnlockedIds()), player);
     }
 }

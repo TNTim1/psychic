@@ -4,6 +4,9 @@ import com.mojang.logging.LogUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.common.capabilities.Capability;
+import net.minecraftforge.common.capabilities.CapabilityManager;
+import net.minecraftforge.common.capabilities.CapabilityToken;
 import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
@@ -19,6 +22,7 @@ import net.tntim1.psychic.Keybinds.KeyInit;
 import net.tntim1.psychic.UI.CastingUi;
 import net.tntim1.psychic.item.ModItems;
 import net.tntim1.psychic.network.ModPackets;
+import net.tntim1.psychic.player_data.PsychicData;
 import org.slf4j.Logger;
 
 @Mod(Psychic.MODID)
@@ -27,32 +31,27 @@ public class Psychic
     public static final String MODID = "psychic";
     private static final Logger LOGGER = LogUtils.getLogger();
 
+    public static final Capability<PsychicData> PSYCHIC_DATA =
+            CapabilityManager.get(new CapabilityToken<>() {});
+
     public Psychic(FMLJavaModLoadingContext context)
     {
         IEventBus modEventBus = context.getModEventBus();
 
         modEventBus.addListener(this::commonSetup);
         modEventBus.addListener(KeyInit::register);
+        modEventBus.addListener(this::addCreative);
 
         ModItems.register(modEventBus);
 
+        // We register this class to the Forge bus for general events (Commands, etc.)
         MinecraftForge.EVENT_BUS.register(this);
-
-        modEventBus.addListener(this::addCreative);
-
-        // PsychicCapabilityEventHandler uses @Mod.EventBusSubscriber on both
-        // its inner classes, so Forge discovers and wires them automatically.
-        // Do NOT manually register it here — that would double-fire events.
 
         context.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
-        event.enqueueWork(() -> {
-            // Capability registration moved to RegisterCapabilitiesEvent
-            // in PsychicCapabilityEventHandler.ModBusEvents — nothing to call here.
-            ModPackets.register();
-        });
+        event.enqueueWork(ModPackets::register);
     }
 
     private void addCreative(BuildCreativeModeTabContentsEvent event) {}
@@ -77,7 +76,6 @@ public class Psychic
         public static void onClientTick(TickEvent.ClientTickEvent event)
         {
             Minecraft mc = Minecraft.getInstance();
-
             if (event.phase == TickEvent.Phase.END && mc.screen == null) {
                 while (KeyInit.exampleHotKey != null && KeyInit.exampleHotKey.consumeClick()) {
                     mc.setScreen(new CastingUi());

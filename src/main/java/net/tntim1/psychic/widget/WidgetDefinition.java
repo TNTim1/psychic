@@ -67,6 +67,33 @@ public class WidgetDefinition {
 
     // ── full constructor ──────────────────────────────────────────────────────
 
+    public final List<TaskRequirement> taskRequirements;
+
+// ── Updated constructor (add taskRequirements parameter at the end) ───────────
+
+    public WidgetDefinition(String id,
+                            ResourceLocation iconTexture,
+                            int canvasX, int canvasY,
+                            int iconW, int iconH,
+                            String label,
+                            PopupType popupType,
+                            String popupData,
+                            List<String> dependencies,
+                            List<TaskRequirement> taskRequirements) {
+        this.id               = id;
+        this.iconTexture      = iconTexture;
+        this.canvasX          = canvasX;
+        this.canvasY          = canvasY;
+        this.iconW            = iconW;
+        this.iconH            = iconH;
+        this.label            = label;
+        this.popupType        = popupType;
+        this.popupData        = popupData;
+        this.dependencies     = Collections.unmodifiableList(dependencies);
+        this.taskRequirements = Collections.unmodifiableList(taskRequirements);
+    }
+
+    /** Convenience: no tasks (existing widgets keep working). */
     public WidgetDefinition(String id,
                             ResourceLocation iconTexture,
                             int canvasX, int canvasY,
@@ -75,16 +102,13 @@ public class WidgetDefinition {
                             PopupType popupType,
                             String popupData,
                             List<String> dependencies) {
-        this.id           = id;
-        this.iconTexture  = iconTexture;
-        this.canvasX      = canvasX;
-        this.canvasY      = canvasY;
-        this.iconW        = iconW;
-        this.iconH        = iconH;
-        this.label        = label;
-        this.popupType    = popupType;
-        this.popupData    = popupData;
-        this.dependencies = Collections.unmodifiableList(dependencies);
+        this(id, iconTexture, canvasX, canvasY, iconW, iconH,
+                label, popupType, popupData, dependencies,
+                Collections.emptyList());
+    }
+
+    public boolean hasTasks() {
+        return !taskRequirements.isEmpty();
     }
 
     // ── convenience: check if deps list is empty ──────────────────────────────
@@ -138,10 +162,10 @@ public class WidgetDefinition {
      * @param entries bullet lines for the popup body
      */
     public static WidgetDefinition list_dependencies(String id, ResourceLocation icon,
-                                        int x, int y,
-                                        String label,
-                                        String[] depIds,
-                                        String... entries) {
+                                                     int x, int y,
+                                                     String label,
+                                                     String[] depIds,
+                                                     String... entries) {
         return new WidgetDefinition(id, icon, x, y, 24, 24,
                 label, PopupType.LIST, String.join("\n", entries),
                 depIds == null ? Collections.emptyList() : Arrays.asList(depIds));
@@ -169,4 +193,30 @@ public class WidgetDefinition {
                 label, PopupType.IMAGE, img.toString(),
                 Arrays.asList(depIds));
     }
+    public static WidgetDefinition infoWithTasks(String id, ResourceLocation icon,
+                                                 int x, int y,
+                                                 String label, String text,
+                                                 String[] depIds,
+                                                 TaskRequirement... tasks) {
+        return new WidgetDefinition(id, icon, x, y, 24, 24,
+                label, PopupType.INFO, text,
+                depIds == null ? Collections.emptyList() : Arrays.asList(depIds),
+                Arrays.asList(tasks));
+    }
+
+    /**
+     * LIST popup gated behind task requirements.
+     */
+    public static WidgetDefinition listWithTasks(String id, ResourceLocation icon,
+                                                 int x, int y,
+                                                 String label,
+                                                 String[] depIds,
+                                                 TaskRequirement[] tasks,
+                                                 String... entries) {
+        return new WidgetDefinition(id, icon, x, y, 24, 24,
+                label, PopupType.LIST, String.join("\n", entries),
+                depIds == null ? Collections.emptyList() : Arrays.asList(depIds),
+                Arrays.asList(tasks));
+    }
+
 }

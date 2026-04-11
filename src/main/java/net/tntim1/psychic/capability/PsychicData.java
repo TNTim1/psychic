@@ -4,6 +4,9 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.player.Player;
+import net.tntim1.psychic.Psychic;
 import net.tntim1.psychic.widget.TabRegistry;
 import net.tntim1.psychic.widget.WidgetDefinition;
 
@@ -12,6 +15,25 @@ import java.util.*;
 public class PsychicData {
 
     private final Set<String> unlockedWidgets = new HashSet<>();
+
+    /** Task progress tracker — saved alongside unlocked widget IDs. */
+    public final TaskProgress taskProgress = new TaskProgress();
+
+    // ── static accessor ───────────────────────────────────────────────────────
+
+    /**
+     * Retrieves the PsychicData capability from any player.
+     * Throws if the capability is missing (should never happen after registration).
+     *
+     * Usage:
+     *   PsychicData data = PsychicData.get(player);
+     */
+    public static PsychicData get(Player player) {
+        return player.getCapability(Psychic.PSYCHIC_DATA)
+                .orElseThrow(() -> new IllegalStateException(
+                        "PsychicData capability missing on player: " + player.getName().getString()
+                ));
+    }
 
     // ── mutation ──────────────────────────────────────────────────────────────
 
@@ -22,8 +44,6 @@ public class PsychicData {
     /**
      * Locks a widget and cascades: any widget whose dependency list contains
      * {@code id} (directly or transitively) is also locked.
-     *
-     * <p>Example: A → B → C. Locking A also locks B and C.
      */
     public void lockCascading(String id) {
         Set<String> toLock = new HashSet<>();
@@ -32,10 +52,6 @@ public class PsychicData {
         unlockedWidgets.removeAll(toLock);
     }
 
-    /**
-     * Checks whether ALL declared dependencies of the given widget are unlocked.
-     * Server-side authority check used in ActivateWidgetPacket.
-     */
     public boolean areDependenciesMet(String widgetId) {
         WidgetDefinition def = TabRegistry.findById(widgetId);
         if (def == null) return false;
@@ -49,8 +65,6 @@ public class PsychicData {
         return unlockedWidgets.contains(id);
     }
 
-    // ── read-only view (used by SyncKnowledgePacket) ──────────────────────────
-
     public Set<String> getUnlockedIds() {
         return Collections.unmodifiableSet(unlockedWidgets);
     }
@@ -60,6 +74,8 @@ public class PsychicData {
     public void copyFrom(PsychicData source) {
         this.unlockedWidgets.clear();
         this.unlockedWidgets.addAll(source.unlockedWidgets);
+        // Also copy task progress so it survives death/respawn
+        this.taskProgress.applySnapshot(source.taskProgress.snapshot());
     }
 
     // ── NBT persistence ───────────────────────────────────────────────────────
@@ -70,6 +86,7 @@ public class PsychicData {
             list.add(StringTag.valueOf(id));
         }
         nbt.put("UnlockedWidgets", list);
+        nbt.put("TaskProgress", taskProgress.save());
     }
 
     public void load(CompoundTag nbt) {
@@ -78,16 +95,25 @@ public class PsychicData {
         for (int i = 0; i < list.size(); i++) {
             unlockedWidgets.add(list.getString(i));
         }
+        if (nbt.contains("TaskProgress")) {
+            taskProgress.load(nbt.getCompound("TaskProgress"));
+        }
+    }
+
+    // ── marked dirty helper ───────────────────────────────────────────────────
+
+    /**
+     * Call after any mutation so the capability serializer knows to re-save.
+     * With Forge capabilities this is a no-op at the data level (the provider
+     * serializes on demand), but keeping the call in TaskEventHandler is good
+     * practice if you ever switch to a SavedData approach.
+     */
+    public void setDirty() {
+        // no-op for capability-backed storage; override if using WorldSavedData
     }
 
     // ── cascade helpers ───────────────────────────────────────────────────────
 
-    /**
-     * Builds a reverse-dependency map:
-     *   dep_id → [list of widget IDs that declare dep_id as a dependency]
-     *
-     * e.g. B.deps=[A], C.deps=[B]  →  { A→[B], B→[C] }
-     */
     private static Map<String, List<String>> buildDependentMap() {
         Map<String, List<String>> map = new HashMap<>();
         for (WidgetDefinition w : TabRegistry.getAllWidgets()) {
@@ -98,10 +124,6 @@ public class PsychicData {
         return map;
     }
 
-    /**
-     * Recursively collects all widget IDs transitively downstream of rootId.
-     * Cycle-safe: result.add() returns false for already-visited nodes.
-     */
     private static void collectDownstream(String rootId,
                                           Set<String> result,
                                           Map<String, List<String>> dependentMap) {

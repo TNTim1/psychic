@@ -6,31 +6,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * Central registry for all Atlas Codex tabs.
- *
- * <p><b>To add a tab or widget, edit the static block at the bottom of this file.</b>
- *
- * <h3>Dependency syntax</h3>
- * Pass widget IDs as trailing varargs to any factory method:
- * <pre>
- *   WidgetDefinition.info("frost_nova", icon, 900, 180, "Frost Nova", "...", "fireball");
- *   //                                                                         ↑ must unlock fireball first
- * </pre>
- * For list widgets use the {@code String[] depIds} overload:
- * <pre>
- *   WidgetDefinition.list("chain_lightning", icon, 1300, 350, "Chain Lightning",
- *       new String[]{"frost_nova", "blink"},   // ← both required
- *       "Strikes nearest mob…", "Chains up to 4…");
- * </pre>
- */
 public class TabRegistry {
 
     private static final List<TabDefinition> TABS = new ArrayList<>();
 
-    // ── lookups (used by PsychicData for cascade logic) ───────────────────────
-
-    /** Returns the widget with the given ID across all tabs, or null. */
     public static WidgetDefinition findById(String id) {
         for (TabDefinition tab : TABS) {
             for (WidgetDefinition w : tab.widgets) {
@@ -40,75 +19,89 @@ public class TabRegistry {
         return null;
     }
 
-    /** Returns a flat list of every widget across all tabs. */
     public static List<WidgetDefinition> getAllWidgets() {
         List<WidgetDefinition> all = new ArrayList<>();
-        for (TabDefinition tab : TABS) {
-            all.addAll(tab.widgets);
-        }
+        for (TabDefinition tab : TABS) all.addAll(tab.widgets);
         return all;
     }
 
     // =========================================================================
-    // TABS — edit / extend freely below
+    // TABS
     // =========================================================================
     static {
 
         // -----------------------------------------------------------------
         // Tab 1: Spells
         //
-        // Dependency chain:
-        //   fireball  (root — no deps)
-        //     └─ blink      (requires fireball)
-        //         └─ frost_nova   (requires blink)
-        //             └─ chain_lightning (requires frost_nova AND blink)
+        // Unlock chain:
+        //   fireball       (root — kill 5 blazes + collect 2 blaze rods)
+        //     └─ blink          (dep: fireball  | task: collect 1 ender pearl)
+        //         └─ frost_nova      (dep: blink     | task: kill 10 strays)
+        //             └─ chain_lightning (deps: frost_nova + blink | tasks: kill 10 skeletons + get 1 lightning rod)
         // -----------------------------------------------------------------
         TabDefinition spells = new TabDefinition(
                 "Spells",
                 new ResourceLocation("minecraft", "textures/item/fire_charge.png"),
                 2048, 1024);
 
-        // Root: no dependencies
-        spells.addWidget(WidgetDefinition.info(
+        // ── Fireball ─────────────────────────────────────────────────────────
+        // Root widget: no widget dependencies, but requires two task completions
+        // before it activates. The popup will show two progress bars.
+        spells.addWidget(WidgetDefinition.infoWithTasks(
                 "fireball",
                 new ResourceLocation("minecraft", "textures/item/blaze_powder.png"),
                 200, 150,
                 "Fireball",
                 "Launches a concentrated fireball in the direction you face.\n\n" +
-                        "Cost: 30 mana\nCooldown: 2s\nDamage: 8 ❤"
-                // no deps
+                        "Cost: 30 mana\nCooldown: 2s\nDamage: 8 ❤",
+                null,   // no widget dependencies
+                TaskRequirement.kill("minecraft:blaze", 5,  "Blazes slain"),
+                TaskRequirement.item("minecraft:blaze_rod", 2, "Blaze rods collected")
         ));
 
-        // Requires fireball
-        spells.addWidget(WidgetDefinition.list_dependencies(
+        // ── Blink ─────────────────────────────────────────────────────────────
+        // Widget dep: fireball must be unlocked first.
+        // Task: pick up 1 ender pearl (simple single-item gate).
+        spells.addWidget(WidgetDefinition.infoWithTasks(
                 "blink",
                 new ResourceLocation("minecraft", "textures/item/ender_pearl.png"),
                 550, 280,
                 "Blink",
-                new String[]{"fireball"},           // ← dependency
-                "Instantly teleport up to 16 blocks forward",
-                "Passes through solid blocks",
-                "Cost: 20 mana | Cooldown: 5s",
-                "Cannot blink into the void"
+                "Instantly teleport up to 16 blocks forward.\n\n" +
+                        "Cost: 20 mana\nCooldown: 5s\nPasses through solid blocks.",
+                new String[]{"fireball"},   // widget dep
+                TaskRequirement.item("minecraft:ender_pearl", 1, "Ender pearl obtained")
         ));
 
-        // Requires blink
-        spells.addWidget(WidgetDefinition.info(
+        // ── Frost Nova ────────────────────────────────────────────────────────
+        // Widget dep: blink.
+        // Tasks: kill 10 strays (cold-themed gating — fits the spell's lore).
+        spells.addWidget(WidgetDefinition.infoWithTasks(
                 "frost_nova",
                 new ResourceLocation("minecraft", "textures/item/snowball.png"),
                 900, 180,
                 "Frost Nova",
-                "Freezes all mobs within 5 blocks.\n\nCost: 45 mana\nDuration: 3s\nCooldown: 8s",
-                "blink"                             // ← dependency
+                "Freezes all mobs within 5 blocks.\n\n" +
+                        "Cost: 45 mana\nDuration: 3s\nCooldown: 8s",
+                new String[]{"blink"},
+                TaskRequirement.kill("minecraft:stray", 10, "Strays defeated")
         ));
 
-        // Requires BOTH frost_nova and blink
-        spells.addWidget(WidgetDefinition.list_dependencies(
+        // ── Chain Lightning ───────────────────────────────────────────────────
+        // Widget deps: BOTH frost_nova AND blink required.
+        // Tasks: kill 10 skeletons AND collect 1 lightning rod.
+        // The popup will show two separate progress bars, each with a checkmark
+        // when done. The widget only auto-activates when BOTH are complete.
+        spells.addWidget(WidgetDefinition.listWithTasks(
                 "chain_lightning",
                 new ResourceLocation("minecraft", "textures/item/lightning_rod.png"),
                 1300, 350,
                 "Chain Lightning",
-                new String[]{"frost_nova", "blink"}, // ← two deps, both required
+                new String[]{"frost_nova", "blink"},
+                new TaskRequirement[]{
+                        TaskRequirement.kill("minecraft:skeleton",    10, "Skeletons struck"),
+                        TaskRequirement.item("minecraft:lightning_rod", 1, "Lightning rod obtained")
+                },
                 "Strikes nearest mob with lightning",
                 "Chains up to 4 additional targets",
                 "Damage reduces 20% per hop",
@@ -120,50 +113,72 @@ public class TabRegistry {
         // -----------------------------------------------------------------
         // Tab 2: Psychic Powers
         //
-        //   mind_probe  (root)
-        //     └─ telekinesis  (requires mind_probe)
-        //         └─ psychic_shield (requires telekinesis)
+        //   mind_probe    (task: kill 3 endermen — "read their minds")
+        //     └─ telekinesis   (dep: mind_probe | task: collect 1 chorus fruit)
+        //         └─ psychic_shield (dep: telekinesis | tasks: survive 20 hits + collect 3 amethyst shards)
         // -----------------------------------------------------------------
         TabDefinition psychic = new TabDefinition(
                 "Psychic",
                 new ResourceLocation("psychic", "textures/item/liber_chaotica.png"),
                 2048, 1024);
 
-        psychic.addWidget(WidgetDefinition.info(
+        // ── Mind Probe ────────────────────────────────────────────────────────
+        // Root — single kill task. Endermen as the lore-friendly gate ("probe their alien minds").
+        psychic.addWidget(WidgetDefinition.infoWithTasks(
                 "mind_probe",
                 new ResourceLocation("minecraft", "textures/item/compass.png"),
                 250, 200,
                 "Mind Probe",
                 "Reveals the health, armor, and active effects\nof the targeted entity.\n\n" +
-                        "Range: 32 blocks\nCost: 10 mana"
+                        "Range: 32 blocks\nCost: 10 mana",
+                null,
+                TaskRequirement.kill("minecraft:enderman", 3, "Endermen probed")
         ));
 
-        psychic.addWidget(WidgetDefinition.list_dependencies(
+        // ── Telekinesis ───────────────────────────────────────────────────────
+        // Dep: mind_probe. Task: chorus fruit (teleportation theme).
+        psychic.addWidget(WidgetDefinition.listWithTasks(
                 "telekinesis",
                 new ResourceLocation("minecraft", "textures/item/writable_book.png"),
                 650, 150,
                 "Telekinesis",
                 new String[]{"mind_probe"},
+                new TaskRequirement[]{
+                        TaskRequirement.item("minecraft:chorus_fruit", 1, "Chorus fruit obtained")
+                },
                 "Pull an item or mob toward you from up to 20 blocks",
                 "Heavier mobs require more mana",
                 "Cannot pull bosses",
                 "Cost: 15–50 mana depending on mass"
         ));
 
-        psychic.addWidget(WidgetDefinition.info(
+        // ── Psychic Shield ────────────────────────────────────────────────────
+        // Dep: telekinesis. Two tasks: survive 20 hits (damage events, tracked
+        // separately via a PlayerHurtEvent listener) AND collect amethyst shards.
+        // This shows the "mixed type" multi-bar layout in the popup.
+        psychic.addWidget(WidgetDefinition.infoWithTasks(
                 "psychic_shield",
                 new ResourceLocation("minecraft", "textures/item/amethyst_shard.png"),
                 1100, 300,
                 "Psychic Shield",
                 "Creates a brief psychic barrier that negates\nthe next hit within 1 second.\n\n" +
                         "Cost: 25 mana\nCooldown: 6s",
-                "telekinesis"
+                new String[]{"telekinesis"},
+                // NOTE: "hits survived" uses a custom Type.DAMAGE handled by a
+                // separate PlayerHurtEvent listener that calls the same
+                // TaskProgress.increment("psychic_shield", 0, 20) path.
+                // You'd add Type.DAMAGE to TaskRequirement.Type for this,
+                // or model it as a kill of a dummy tracker entity — whichever
+                // fits your architecture. Shown here for completeness.
+                TaskRequirement.kill("minecraft:amethyst_cluster", 20, "Amethyst cluster"), // placeholder
+                TaskRequirement.item("minecraft:amethyst_shard",    3,  "Amethyst shards")
         ));
 
         TABS.add(psychic);
 
         // -----------------------------------------------------------------
-        // Tab 3: Lore  (no dependency chain — all roots)
+        // Tab 3: Lore — no tasks, no deps. These use the plain info() factory
+        // so nothing about them changes. Kept identical to the original.
         // -----------------------------------------------------------------
         TabDefinition lore = new TabDefinition(
                 "Lore",
@@ -184,7 +199,7 @@ public class TabRegistry {
                 new ResourceLocation("minecraft", "textures/item/map.png"),
                 700, 300,
                 "Known Factions",
-                null,                               // no deps (null → empty list)
+                null,
                 "The Veil — seekers of forbidden knowledge",
                 "Iron Conclave — suppressors of psychic power",
                 "Ember Circle — pyromancy & psychic fusion",
