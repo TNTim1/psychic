@@ -180,42 +180,22 @@ public class TabRegistry {
         // Tab 3: Lore — no tasks, no deps. These use the plain info() factory
         // so nothing about them changes. Kept identical to the original.
         // -----------------------------------------------------------------
-        TabDefinition lore = new TabDefinition(
-                "Lore",
-                new ResourceLocation("minecraft", "textures/item/enchanted_book.png"),
+        TabDefinition warp = new TabDefinition(
+                "Warp",
+                new ResourceLocation("psychic", "textures/gui/widgets/fills/chaos_star.png"),
                 1536, 1024);
 
-        lore.addWidget(WidgetDefinition.info(
-                "lore_origin",
-                new ResourceLocation("minecraft", "textures/item/book.png"),
-                200, 200,
-                "Origin of Psychic Arts",
-                "Long before the First Age, wandering scholars\ndiscovered that emotion itself could be weaponised.\n\n" +
-                        "They called the discipline 'Psychica' — the art\nof bending reality with thought alone."
-        ));
-
-        lore.addWidget(WidgetDefinition.list(
-                "lore_factions",
-                new ResourceLocation("minecraft", "textures/item/map.png"),
-                700, 300,
-                "Known Factions",
+        warp.addWidget(WidgetDefinition.infoWithTasks(
+                "center",
+                new ResourceLocation("minecraft", "textures/item/compass.png"),
+                0, 0,
+                "The Warp",
+                "Reveals the health, armor, and active effects\nof the targeted entity.\n\n" +
+                        "Range: 32 blocks\nCost: 10 mana",
                 null,
-                "The Veil — seekers of forbidden knowledge",
-                "Iron Conclave — suppressors of psychic power",
-                "Ember Circle — pyromancy & psychic fusion",
-                "The Unbound — rogue practitioners"
+                TaskRequirement.kill("minecraft:enderman", 3, "Endermen probed")
         ));
-
-        lore.addWidget(WidgetDefinition.info(
-                "lore_timeline",
-                new ResourceLocation("minecraft", "textures/item/clock.png"),
-                1150, 180,
-                "Timeline",
-                "Year 0   — Psychica first recorded\nYear 340 — The Veil founded\nYear 612 — Iron Conclave wars\n" +
-                        "Year 890 — The Unbound Schism\nYear 1024 — Present day"
-        ));
-
-        TABS.add(lore);
+        TABS.add(warp);
     }
 
     public static List<TabDefinition> getTabs() {
