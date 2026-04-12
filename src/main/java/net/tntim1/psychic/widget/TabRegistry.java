@@ -11,11 +11,9 @@ public class TabRegistry {
     private static final List<TabDefinition> TABS = new ArrayList<>();
 
     public static WidgetDefinition findById(String id) {
-        for (TabDefinition tab : TABS) {
-            for (WidgetDefinition w : tab.widgets) {
+        for (TabDefinition tab : TABS)
+            for (WidgetDefinition w : tab.widgets)
                 if (w.id.equals(id)) return w;
-            }
-        }
         return null;
     }
 
@@ -32,12 +30,7 @@ public class TabRegistry {
 
         // -----------------------------------------------------------------
         // Tab 1: Spells
-        //
-        // Unlock chain:
-        //   fireball       (root — kill 5 blazes + collect 2 blaze rods)
-        //     └─ blink          (dep: fireball  | task: collect 1 ender pearl)
-        //         └─ frost_nova      (dep: blink     | task: kill 10 strays)
-        //             └─ chain_lightning (deps: frost_nova + blink | tasks: kill 10 skeletons + get 1 lightning rod)
+        // Chain: fireball → blink → frost_nova → chain_lightning
         // -----------------------------------------------------------------
         TabDefinition spells = new TabDefinition(
                 "Spells",
@@ -45,37 +38,60 @@ public class TabRegistry {
                 2048, 1024);
 
         // ── Fireball ─────────────────────────────────────────────────────────
-        // Root widget: no widget dependencies, but requires two task completions
-        // before it activates. The popup will show two progress bars.
-        spells.addWidget(WidgetDefinition.infoWithTasks(
+        // Multi-page popup: page 1 = spell description, page 2 = lore + blaze render.
+        spells.addWidget(WidgetDefinition.simple(
                 "fireball",
                 new ResourceLocation("minecraft", "textures/item/blaze_powder.png"),
                 200, 150,
                 "Fireball",
-                "Launches a concentrated fireball in the direction you face.\n\n" +
-                        "Cost: 30 mana\nCooldown: 2s\nDamage: 8 ❤",
-                null,   // no widget dependencies
-                TaskRequirement.kill("minecraft:blaze", 5,  "Blazes slain"),
+                PopupContent.titledPages(
+                        new String[]{ "Overview", "Requirements" },
+                        new List[]{
+                                // Page 1 — description
+                                List.of(
+                                        PopupContent.text(
+                                                "Launches a concentrated fireball in the\n" +
+                                                        "direction you face.\n\n" +
+                                                        "Cost: 30 mana\nCooldown: 2s\nDamage: 8 \u2764"
+                                        )
+                                ),
+                                // Page 2 — task flavour with renders
+                                List.of(
+                                        PopupContent.text("To unlock Fireball you must first\nprove your mastery of fire."),
+                                        PopupContent.entityRender("minecraft:blaze",  "Blaze — slay 5"),
+                                        PopupContent.itemRender("minecraft:blaze_rod", "Blaze Rod — collect 2")
+                                )
+                        }
+                ),
+                null, // no widget deps
+                false, // no confirmation checkbox needed
+                TaskRequirement.kill("minecraft:blaze",    5, "Blazes slain"),
                 TaskRequirement.item("minecraft:blaze_rod", 2, "Blaze rods collected")
         ));
 
         // ── Blink ─────────────────────────────────────────────────────────────
-        // Widget dep: fireball must be unlocked first.
-        // Task: pick up 1 ender pearl (simple single-item gate).
-        spells.addWidget(WidgetDefinition.infoWithTasks(
+        // Single-page popup using the convenience method; renders an ender pearl.
+        spells.addWidget(WidgetDefinition.simple(
                 "blink",
                 new ResourceLocation("minecraft", "textures/item/ender_pearl.png"),
                 550, 280,
                 "Blink",
-                "Instantly teleport up to 16 blocks forward.\n\n" +
-                        "Cost: 20 mana\nCooldown: 5s\nPasses through solid blocks.",
-                new String[]{"fireball"},   // widget dep
+                PopupContent.page(
+                        PopupContent.text(
+                                "Instantly teleport up to 16 blocks forward.\n\n" +
+                                        "Cost: 20 mana\nCooldown: 5s\n" +
+                                        "Passes through solid blocks."
+                        ),
+                        PopupContent.itemRender("minecraft:ender_pearl", "Ender Pearl — collect 1")
+                ),
+                new String[]{ "fireball" },
+                false,
                 TaskRequirement.item("minecraft:ender_pearl", 1, "Ender pearl obtained")
         ));
 
         // ── Frost Nova ────────────────────────────────────────────────────────
-        // Widget dep: blink.
-        // Tasks: kill 10 strays (cold-themed gating — fits the spell's lore).
+        // Two pages; no explicit entity render (auto-generated via infoWithTasks for
+        // brevity — mix of styles is fine).
         spells.addWidget(WidgetDefinition.infoWithTasks(
                 "frost_nova",
                 new ResourceLocation("minecraft", "textures/item/snowball.png"),
@@ -83,39 +99,47 @@ public class TabRegistry {
                 "Frost Nova",
                 "Freezes all mobs within 5 blocks.\n\n" +
                         "Cost: 45 mana\nDuration: 3s\nCooldown: 8s",
-                new String[]{"blink"},
+                new String[]{ "blink" },
                 TaskRequirement.kill("minecraft:stray", 10, "Strays defeated")
         ));
 
         // ── Chain Lightning ───────────────────────────────────────────────────
-        // Widget deps: BOTH frost_nova AND blink required.
-        // Tasks: kill 10 skeletons AND collect 1 lightning rod.
-        // The popup will show two separate progress bars, each with a checkmark
-        // when done. The widget only auto-activates when BOTH are complete.
-        spells.addWidget(WidgetDefinition.listWithTasks(
+        // Multi-page + confirmation checkbox.
+        // requiresConfirmation = true  →  checkbox must be ticked before activating.
+        spells.addWidget(WidgetDefinition.simple(
                 "chain_lightning",
                 new ResourceLocation("minecraft", "textures/item/lightning_rod.png"),
                 1300, 350,
                 "Chain Lightning",
-                new String[]{"frost_nova", "blink"},
-                new TaskRequirement[]{
-                        TaskRequirement.kill("minecraft:skeleton",    10, "Skeletons struck"),
-                        TaskRequirement.item("minecraft:lightning_rod", 1, "Lightning rod obtained")
-                },
-                "Strikes nearest mob with lightning",
-                "Chains up to 4 additional targets",
-                "Damage reduces 20% per hop",
-                "Cost: 60 mana | Cooldown: 10s"
+                PopupContent.titledPages(
+                        new String[]{ "Ability", "How to unlock" },
+                        new List[]{
+                                List.of(
+                                        PopupContent.list(
+                                                "Strikes nearest mob with lightning",
+                                                "Chains up to 4 additional targets",
+                                                "Damage reduces 20% per hop",
+                                                "Cost: 60 mana | Cooldown: 10s"
+                                        )
+                                ),
+                                List.of(
+                                        PopupContent.text("Strike down your enemies and channel\nthe storm to claim this power."),
+                                        PopupContent.entityRender("minecraft:skeleton",     "Skeleton — strike 10"),
+                                        PopupContent.itemRender("minecraft:lightning_rod",  "Lightning Rod — collect 1")
+                                )
+                        }
+                ),
+                new String[]{ "frost_nova", "blink" },
+                true, // requires confirmation checkbox
+                TaskRequirement.kill("minecraft:skeleton",    10, "Skeletons struck"),
+                TaskRequirement.item("minecraft:lightning_rod", 1, "Lightning rod obtained")
         ));
 
         TABS.add(spells);
 
         // -----------------------------------------------------------------
         // Tab 2: Psychic Powers
-        //
-        //   mind_probe    (task: kill 3 endermen — "read their minds")
-        //     └─ telekinesis   (dep: mind_probe | task: collect 1 chorus fruit)
-        //         └─ psychic_shield (dep: telekinesis | tasks: survive 20 hits + collect 3 amethyst shards)
+        // Chain: mind_probe → telekinesis → psychic_shield
         // -----------------------------------------------------------------
         TabDefinition psychic = new TabDefinition(
                 "Psychic",
@@ -123,78 +147,124 @@ public class TabRegistry {
                 2048, 1024);
 
         // ── Mind Probe ────────────────────────────────────────────────────────
-        // Root — single kill task. Endermen as the lore-friendly gate ("probe their alien minds").
-        psychic.addWidget(WidgetDefinition.infoWithTasks(
+        psychic.addWidget(WidgetDefinition.simple(
                 "mind_probe",
                 new ResourceLocation("minecraft", "textures/item/compass.png"),
                 250, 200,
                 "Mind Probe",
-                "Reveals the health, armor, and active effects\nof the targeted entity.\n\n" +
-                        "Range: 32 blocks\nCost: 10 mana",
+                PopupContent.page(
+                        PopupContent.text(
+                                "Reveals the health, armor, and active\neffects of the targeted entity.\n\n" +
+                                        "Range: 32 blocks\nCost: 10 mana"
+                        ),
+                        PopupContent.entityRender("minecraft:enderman", "Enderman — probe 3")
+                ),
                 null,
+                false,
                 TaskRequirement.kill("minecraft:enderman", 3, "Endermen probed")
         ));
 
         // ── Telekinesis ───────────────────────────────────────────────────────
-        // Dep: mind_probe. Task: chorus fruit (teleportation theme).
-        psychic.addWidget(WidgetDefinition.listWithTasks(
+        // Three-page popup: overview, mechanics, unlock requirement.
+        psychic.addWidget(WidgetDefinition.simple(
                 "telekinesis",
                 new ResourceLocation("minecraft", "textures/item/writable_book.png"),
                 650, 150,
                 "Telekinesis",
-                new String[]{"mind_probe"},
-                new TaskRequirement[]{
-                        TaskRequirement.item("minecraft:chorus_fruit", 1, "Chorus fruit obtained")
-                },
-                "Pull an item or mob toward you from up to 20 blocks",
-                "Heavier mobs require more mana",
-                "Cannot pull bosses",
-                "Cost: 15–50 mana depending on mass"
+                PopupContent.titledPages(
+                        new String[]{ "Overview", "Mechanics", "Unlock" },
+                        new List[]{
+                                List.of(
+                                        PopupContent.text("Channel psychic force to pull objects\ntoward you from a distance.")
+                                ),
+                                List.of(
+                                        PopupContent.list(
+                                                "Pull item or mob from up to 20 blocks",
+                                                "Heavier mobs require more mana",
+                                                "Cannot pull bosses",
+                                                "Cost: 15\u201350 mana depending on mass"
+                                        )
+                                ),
+                                List.of(
+                                        PopupContent.text("The chorus fruit teaches the\nessence of teleportation."),
+                                        PopupContent.itemRender("minecraft:chorus_fruit", "Chorus Fruit — collect 1")
+                                )
+                        }
+                ),
+                new String[]{ "mind_probe" },
+                false,
+                TaskRequirement.item("minecraft:chorus_fruit", 1, "Chorus fruit obtained")
         ));
 
         // ── Psychic Shield ────────────────────────────────────────────────────
-        // Dep: telekinesis. Two tasks: survive 20 hits (damage events, tracked
-        // separately via a PlayerHurtEvent listener) AND collect amethyst shards.
-        // This shows the "mixed type" multi-bar layout in the popup.
-        psychic.addWidget(WidgetDefinition.infoWithTasks(
+        // Requires confirmation.
+        psychic.addWidget(WidgetDefinition.simple(
                 "psychic_shield",
                 new ResourceLocation("minecraft", "textures/item/amethyst_shard.png"),
                 1100, 300,
                 "Psychic Shield",
-                "Creates a brief psychic barrier that negates\nthe next hit within 1 second.\n\n" +
-                        "Cost: 25 mana\nCooldown: 6s",
-                new String[]{"telekinesis"},
-                // NOTE: "hits survived" uses a custom Type.DAMAGE handled by a
-                // separate PlayerHurtEvent listener that calls the same
-                // TaskProgress.increment("psychic_shield", 0, 20) path.
-                // You'd add Type.DAMAGE to TaskRequirement.Type for this,
-                // or model it as a kill of a dummy tracker entity — whichever
-                // fits your architecture. Shown here for completeness.
-                TaskRequirement.kill("minecraft:amethyst_cluster", 20, "Amethyst cluster"), // placeholder
+                PopupContent.page(
+                        PopupContent.text(
+                                "Creates a brief psychic barrier that\nnegates the next hit within 1 second.\n\n" +
+                                        "Cost: 25 mana\nCooldown: 6s"
+                        ),
+                        PopupContent.entityRender("minecraft:amethyst_cluster", "Amethyst Cluster — break 20"),
+                        PopupContent.itemRender("minecraft:amethyst_shard",    "Amethyst Shard — collect 3")
+                ),
+                new String[]{ "telekinesis" },
+                true, // confirm checkbox
+                TaskRequirement.kill("minecraft:amethyst_cluster", 20, "Amethyst clusters"),
                 TaskRequirement.item("minecraft:amethyst_shard",    3,  "Amethyst shards")
         ));
 
         TABS.add(psychic);
 
         // -----------------------------------------------------------------
-        // Tab 3: Lore — no tasks, no deps. These use the plain info() factory
-        // so nothing about them changes. Kept identical to the original.
+        // Tab 3: Warp — chaos-star layout, same as before
+        // (using the legacy infoWithTasks helper for brevity)
         // -----------------------------------------------------------------
         TabDefinition warp = new TabDefinition(
                 "Warp",
                 new ResourceLocation("psychic", "textures/gui/widgets/fills/chaos_star.png"),
                 1536, 1024);
 
-        warp.addWidget(WidgetDefinition.infoWithTasks(
+        warp.addWidget(WidgetDefinition.info(
                 "center",
-                new ResourceLocation("minecraft", "textures/item/compass.png"),
+                new ResourceLocation("psychic", "textures/gui/widgets/fills/chaos_star.png"),
                 0, 0,
                 "The Warp",
                 "Reveals the health, armor, and active effects\nof the targeted entity.\n\n" +
                         "Range: 32 blocks\nCost: 10 mana",
-                null,
-                TaskRequirement.kill("minecraft:enderman", 3, "Endermen probed")
+                48, 48
         ));
+
+        for (String[] entry : new String[][]{
+                { "thymos0",   "thymos_symbol",   "-70", "-70", "Thymos"   },
+                { "energia0",  "energia_symbol",   "70", "-70", "Energia"  },
+                { "mousike0",  "mousike_symbol",   "70",  "70", "Mousike"  },
+                { "kyklos0",   "kyklos_symbol",   "-70",  "70", "Kyklos"   },
+                { "phthora0",  "phthora_symbol",    "0", "-100", "Phthora"  },
+                { "metabole0", "metabole_symbol", "-100",  "0", "Metabole" },
+                { "misos0",    "misos_symbol",      "0", "100", "Misos"    },
+                { "techne0",   "techne_symbol",   "100",  "0", "Techne"   },
+        }) {
+            warp.addWidget(WidgetDefinition.infoWithTasks(
+                    entry[0],
+                    new ResourceLocation("psychic", "textures/gui/widgets/fills/" + entry[1] + ".png"),
+                    Integer.parseInt(entry[2]), Integer.parseInt(entry[3]),
+                    entry[4],
+                    "Reveals the health, armor, and active effects\nof the targeted entity.\n\n" +
+                            "Range: 32 blocks\nCost: 10 mana",
+                    new String[]{ "center" },
+                    TaskRequirement.kill("minecraft:enderman", 3, "Endermen probed")
+            ));
+        }
+
+        warp.addDecorater(new DecoraterDefinition(
+                new ResourceLocation("psychic", "textures/gui/widgets/fills/chaos_star_high_res.png"),
+                0, 0, 200, 200
+        ));
+
         TABS.add(warp);
     }
 

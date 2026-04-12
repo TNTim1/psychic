@@ -11,24 +11,40 @@ import java.util.List;
  *
  * <h3>Dependencies</h3>
  * A widget can declare a list of other widget IDs it requires to be unlocked
- * before it can be opened or activated. If any dependency is not unlocked, the
+ * before it can be opened or activated. If any dependency is not unlocked the
  * widget is "locked" — its popup cannot be opened and the ACTIVATE button is
- * disabled. When a dependency is re-locked (cascaded from above), this widget
- * is automatically locked too.
+ * disabled.
+ *
+ * <h3>Task confirmation</h3>
+ * When {@link #requiresConfirmation} is {@code true}, a completed task set
+ * shows a checkbox the player must tick before the ACTIVATE button becomes
+ * available. The checkbox uses the textures defined in
+ * {@link #CHECKBOX_UNCHECKED} / {@link #CHECKBOX_HOVERED} / {@link #CHECKBOX_CHECKED}.
  *
  * <h3>Quick-add helpers</h3>
  * <pre>
- *   // No dependencies
- *   WidgetDefinition.info(id, icon, x, y, "Label", "Body text.");
- *
- *   // With dependencies
- *   WidgetDefinition.info(id, icon, x, y, "Label", "Body text.", "dep_id_1", "dep_id_2");
- *
- *   // Bulleted list popup
- *   WidgetDefinition.list(id, icon, x, y, "Label", new String[]{"dep1"}, "Line 1", "Line 2");
+ *   WidgetDefinition.simple("fireball", icon, 200, 150, "Fireball",
+ *       PopupContent.page(
+ *           PopupContent.text("Launches a fireball.\nCost: 30 mana"),
+ *           PopupContent.entityRender("minecraft:blaze", "Blaze")
+ *       ),
+ *       null,
+ *       TaskRequirement.kill("minecraft:blaze", 5, "Blazes slain")
+ *   );
  * </pre>
  */
 public class WidgetDefinition {
+
+    // ── Checkbox textures ─────────────────────────────────────────────────────
+    // Define your actual resource locations here.
+    public static final ResourceLocation CHECKBOX_UNCHECKED =
+            new ResourceLocation("psychic", "textures/gui/widgets/checkbox_unchecked.png");
+    public static final ResourceLocation CHECKBOX_HOVERED =
+            new ResourceLocation("psychic", "textures/gui/widgets/checkbox_hovered.png");
+    public static final ResourceLocation CHECKBOX_CHECKED =
+            new ResourceLocation("psychic", "textures/gui/widgets/checkbox_checked.png");
+
+    // ── Fields ────────────────────────────────────────────────────────────────
 
     /** Unique identifier for this widget. Used for unlock tracking and dependency references. */
     public final String id;
@@ -36,7 +52,7 @@ public class WidgetDefinition {
     /** Texture rendered as the widget's icon on the canvas. */
     public final ResourceLocation iconTexture;
 
-    /** Position on the scrollable canvas (canvas-pixels, origin top-left). */
+    /** Position on the scrollable canvas (canvas-pixels, origin centred). */
     public final int canvasX, canvasY;
 
     /** Icon render size in screen-pixels before zoom is applied. */
@@ -45,167 +61,175 @@ public class WidgetDefinition {
     /** Short label shown as a tooltip on hover and in the popup title. */
     public final String label;
 
-    /** Which popup style to open on click. */
-    public final PopupType popupType;
-
-    /**
-     * Data passed to the popup renderer. Meaning depends on {@link #popupType}:
-     * <ul>
-     *   <li>INFO   – plain text body (use \n for line breaks)</li>
-     *   <li>LIST   – newline-separated bullet entries</li>
-     *   <li>IMAGE  – ResourceLocation string, e.g. "psychic:textures/gui/map.png"</li>
-     *   <li>CUSTOM – identifier string for a custom renderer</li>
-     * </ul>
-     */
-    public final String popupData;
+    /** Full popup content (pages + blocks). Never null. */
+    public final PopupContent popupContent;
 
     /**
      * IDs of widgets that must ALL be unlocked before this widget can be
-     * opened or activated. An empty list means no prerequisites.
+     * opened or activated.
      */
     public final List<String> dependencies;
 
-    // ── full constructor ──────────────────────────────────────────────────────
-
+    /** Task requirements that gate this widget's activation. */
     public final List<TaskRequirement> taskRequirements;
 
-// ── Updated constructor (add taskRequirements parameter at the end) ───────────
+    /**
+     * When {@code true} the player must manually tick a confirmation checkbox
+     * after all tasks are complete before the ACTIVATE button is enabled.
+     */
+    public final boolean requiresConfirmation;
+
+    // ── Constructor ───────────────────────────────────────────────────────────
 
     public WidgetDefinition(String id,
                             ResourceLocation iconTexture,
                             int canvasX, int canvasY,
                             int iconW, int iconH,
                             String label,
-                            PopupType popupType,
-                            String popupData,
+                            PopupContent popupContent,
                             List<String> dependencies,
-                            List<TaskRequirement> taskRequirements) {
-        this.id               = id;
-        this.iconTexture      = iconTexture;
-        this.canvasX          = canvasX;
-        this.canvasY          = canvasY;
-        this.iconW            = iconW;
-        this.iconH            = iconH;
-        this.label            = label;
-        this.popupType        = popupType;
-        this.popupData        = popupData;
-        this.dependencies     = Collections.unmodifiableList(dependencies);
-        this.taskRequirements = Collections.unmodifiableList(taskRequirements);
+                            List<TaskRequirement> taskRequirements,
+                            boolean requiresConfirmation) {
+        this.id                  = id;
+        this.iconTexture         = iconTexture;
+        this.canvasX             = canvasX;
+        this.canvasY             = canvasY;
+        this.iconW               = iconW;
+        this.iconH               = iconH;
+        this.label               = label;
+        this.popupContent        = popupContent;
+        this.dependencies        = Collections.unmodifiableList(dependencies);
+        this.taskRequirements    = Collections.unmodifiableList(taskRequirements);
+        this.requiresConfirmation = requiresConfirmation;
     }
 
-    /** Convenience: no tasks (existing widgets keep working). */
-    public WidgetDefinition(String id,
-                            ResourceLocation iconTexture,
-                            int canvasX, int canvasY,
-                            int iconW, int iconH,
-                            String label,
-                            PopupType popupType,
-                            String popupData,
-                            List<String> dependencies) {
-        this(id, iconTexture, canvasX, canvasY, iconW, iconH,
-                label, popupType, popupData, dependencies,
-                Collections.emptyList());
-    }
+    // ── Convenience predicates ────────────────────────────────────────────────
 
-    public boolean hasTasks() {
-        return !taskRequirements.isEmpty();
-    }
+    public boolean hasDependencies()  { return !dependencies.isEmpty(); }
+    public boolean hasTasks()         { return !taskRequirements.isEmpty(); }
 
-    // ── convenience: check if deps list is empty ──────────────────────────────
-
-    public boolean hasDependencies() {
-        return !dependencies.isEmpty();
-    }
-
-    // ── factory helpers ───────────────────────────────────────────────────────
+    // ── Primary factory — everything explicit ─────────────────────────────────
 
     /**
-     * INFO popup, no dependencies.
+     * Full-control factory.
+     *
+     * @param requiresConfirmation if true, tasks need a manual checkbox tick before activation
      */
+    public static WidgetDefinition simple(String id, ResourceLocation icon,
+                                          int x, int y,
+                                          String label,
+                                          PopupContent content,
+                                          String[] depIds,
+                                          boolean requiresConfirmation,
+                                          TaskRequirement... tasks) {
+        return new WidgetDefinition(id, icon, x, y, 24, 24, label, content,
+                depIds == null ? Collections.emptyList() : Arrays.asList(depIds),
+                Arrays.asList(tasks), requiresConfirmation);
+    }
+
+    /** Same as {@link #simple} with {@code requiresConfirmation = false}. */
+    public static WidgetDefinition simple(String id, ResourceLocation icon,
+                                          int x, int y,
+                                          String label,
+                                          PopupContent content,
+                                          String[] depIds,
+                                          TaskRequirement... tasks) {
+        return simple(id, icon, x, y, label, content, depIds, false, tasks);
+    }
+
+    /** Custom icon size variant. */
+    public static WidgetDefinition simple(String id, ResourceLocation icon,
+                                          int x, int y,
+                                          int iconW, int iconH,
+                                          String label,
+                                          PopupContent content,
+                                          String[] depIds,
+                                          boolean requiresConfirmation,
+                                          TaskRequirement... tasks) {
+        return new WidgetDefinition(id, icon, x, y, iconW, iconH, label, content,
+                depIds == null ? Collections.emptyList() : Arrays.asList(depIds),
+                Arrays.asList(tasks), requiresConfirmation);
+    }
+
+    // ── Legacy-compatible factories (old API, now delegate to new system) ──────
+
+    /** INFO popup (plain text), no deps, no tasks. */
     public static WidgetDefinition info(String id, ResourceLocation icon,
                                         int x, int y,
                                         String label, String text) {
-        return new WidgetDefinition(id, icon, x, y, 24, 24,
-                label, PopupType.INFO, text,
-                Collections.emptyList());
+        return simple(id, icon, x, y, label,
+                PopupContent.page(PopupContent.text(text)), null);
     }
 
-    /**
-     * INFO popup with dependencies.
-     *
-     * @param depIds IDs of widgets that must be unlocked first
-     */
+    /** INFO popup with custom icon size, no deps, no tasks. */
+    public static WidgetDefinition info(String id, ResourceLocation icon,
+                                        int x, int y,
+                                        String label, String text,
+                                        int iconW, int iconH) {
+        return new WidgetDefinition(id, icon, x, y, iconW, iconH, label,
+                PopupContent.page(PopupContent.text(text)),
+                Collections.emptyList(), Collections.emptyList(), false);
+    }
+
+    /** INFO popup with dependency IDs, no tasks. */
     public static WidgetDefinition info(String id, ResourceLocation icon,
                                         int x, int y,
                                         String label, String text,
                                         String... depIds) {
-        return new WidgetDefinition(id, icon, x, y, 24, 24,
-                label, PopupType.INFO, text,
-                Arrays.asList(depIds));
+        return simple(id, icon, x, y, label,
+                PopupContent.page(PopupContent.text(text)), depIds);
     }
 
-    /**
-     * LIST popup, no dependencies.
-     */
+    /** LIST popup (bulleted), no deps, no tasks. */
     public static WidgetDefinition list(String id, ResourceLocation icon,
                                         int x, int y,
                                         String label, String... entries) {
-        return new WidgetDefinition(id, icon, x, y, 24, 24,
-                label, PopupType.LIST, String.join("\n", entries),
-                Collections.emptyList());
+        return simple(id, icon, x, y, label,
+                PopupContent.page(PopupContent.list(entries)), null);
     }
 
-    /**
-     * LIST popup with dependencies.
-     *
-     * @param depIds  IDs of widgets that must be unlocked first (null = none)
-     * @param entries bullet lines for the popup body
-     */
+    /** LIST popup with dep IDs, no tasks. */
     public static WidgetDefinition list_dependencies(String id, ResourceLocation icon,
                                                      int x, int y,
                                                      String label,
                                                      String[] depIds,
                                                      String... entries) {
-        return new WidgetDefinition(id, icon, x, y, 24, 24,
-                label, PopupType.LIST, String.join("\n", entries),
-                depIds == null ? Collections.emptyList() : Arrays.asList(depIds));
+        return simple(id, icon, x, y, label,
+                PopupContent.page(PopupContent.list(entries)), depIds);
     }
 
-    /**
-     * IMAGE popup, no dependencies.
-     */
+    /** IMAGE popup, no deps, no tasks. */
     public static WidgetDefinition image(String id, ResourceLocation icon,
                                          int x, int y,
                                          String label, ResourceLocation img) {
-        return new WidgetDefinition(id, icon, x, y, 24, 24,
-                label, PopupType.IMAGE, img.toString(),
-                Collections.emptyList());
+        return simple(id, icon, x, y, label,
+                PopupContent.page(PopupContent.image(img)), null);
     }
 
     /**
-     * IMAGE popup with dependencies.
+     * INFO popup with tasks.
+     * Auto-generates an ENTITY_RENDER block for each task requirement,
+     * appended after the text block.
      */
-    public static WidgetDefinition image(String id, ResourceLocation icon,
-                                         int x, int y,
-                                         String label, ResourceLocation img,
-                                         String... depIds) {
-        return new WidgetDefinition(id, icon, x, y, 24, 24,
-                label, PopupType.IMAGE, img.toString(),
-                Arrays.asList(depIds));
-    }
     public static WidgetDefinition infoWithTasks(String id, ResourceLocation icon,
                                                  int x, int y,
                                                  String label, String text,
                                                  String[] depIds,
                                                  TaskRequirement... tasks) {
-        return new WidgetDefinition(id, icon, x, y, 24, 24,
-                label, PopupType.INFO, text,
+        // Build blocks: text + one render block per task
+        java.util.List<PopupContent.Block> blocks = new java.util.ArrayList<>();
+        blocks.add(PopupContent.text(text));
+        for (TaskRequirement t : tasks) blocks.add(PopupContent.renderForTask(t));
+
+        return new WidgetDefinition(id, icon, x, y, 24, 24, label,
+                new PopupContent(List.of(new PopupContent.Page(null, blocks))),
                 depIds == null ? Collections.emptyList() : Arrays.asList(depIds),
-                Arrays.asList(tasks));
+                Arrays.asList(tasks), false);
     }
 
     /**
-     * LIST popup gated behind task requirements.
+     * LIST popup with tasks.
+     * Auto-generates render blocks for each task, placed after the list.
      */
     public static WidgetDefinition listWithTasks(String id, ResourceLocation icon,
                                                  int x, int y,
@@ -213,10 +237,13 @@ public class WidgetDefinition {
                                                  String[] depIds,
                                                  TaskRequirement[] tasks,
                                                  String... entries) {
-        return new WidgetDefinition(id, icon, x, y, 24, 24,
-                label, PopupType.LIST, String.join("\n", entries),
-                depIds == null ? Collections.emptyList() : Arrays.asList(depIds),
-                Arrays.asList(tasks));
-    }
+        java.util.List<PopupContent.Block> blocks = new java.util.ArrayList<>();
+        blocks.add(PopupContent.list(entries));
+        for (TaskRequirement t : tasks) blocks.add(PopupContent.renderForTask(t));
 
+        return new WidgetDefinition(id, icon, x, y, 24, 24, label,
+                new PopupContent(List.of(new PopupContent.Page(null, blocks))),
+                depIds == null ? Collections.emptyList() : Arrays.asList(depIds),
+                Arrays.asList(tasks), false);
+    }
 }

@@ -9,7 +9,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
-import net.tntim1.psychic.screen.AtlasCodexScreen;
+import net.tntim1.psychic.UI.LiberChaoticaScreen;
 
 public class LiberChaotica extends Item {
 
@@ -27,6 +27,6 @@ public class LiberChaotica extends Item {
 
     @OnlyIn(Dist.CLIENT)
     private void openScreen() {
-        Minecraft.getInstance().setScreen(new AtlasCodexScreen());
+        Minecraft.getInstance().setScreen(new LiberChaoticaScreen());
     }
 }

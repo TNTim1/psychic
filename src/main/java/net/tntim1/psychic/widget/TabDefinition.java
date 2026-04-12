@@ -24,6 +24,7 @@ public class TabDefinition {
     public final int canvasWidth, canvasHeight;
 
     public final List<WidgetDefinition> widgets = new ArrayList<>();
+    public final List<DecoraterDefinition> decorators = new ArrayList<>();
     public final ResourceLocation icon; // Add this
 
     public TabDefinition(String name, ResourceLocation icon, int canvasWidth, int canvasHeight) {
@@ -35,6 +36,10 @@ public class TabDefinition {
 
     public TabDefinition addWidget(WidgetDefinition widget) {
         widgets.add(widget);
+        return this;
+    }
+    public TabDefinition addDecorater(DecoraterDefinition decorater) {
+        decorators.add(decorater);
         return this;
     }
 
