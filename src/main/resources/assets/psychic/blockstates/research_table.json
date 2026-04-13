@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "psychic:block/research_table" },
+    "facing=south": { "model": "psychic:block/research_table", "y": 180 },
+    "facing=west":  { "model": "psychic:block/research_table", "y": 270 },
+    "facing=east":  { "model": "psychic:block/research_table", "y": 90 }
+  }
+}

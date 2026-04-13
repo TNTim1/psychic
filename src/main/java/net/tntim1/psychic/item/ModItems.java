@@ -16,6 +16,7 @@ public class ModItems {
     public static final RegistryObject<Item> ATLAS_CODEX =
             ITEMS.register("liber_chaotica", LiberChaotica::new);
 
+
     public static void register(IEventBus eventBus) {
         ITEMS.register(eventBus);
     }

@@ -1,6 +1,7 @@
 package net.tntim1.psychic.widget;
 
 import net.minecraft.resources.ResourceLocation;
+import net.tntim1.psychic.Keybinds.KeyInit;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -39,33 +40,46 @@ public class TabRegistry {
 
         // ── Fireball ─────────────────────────────────────────────────────────
         // Multi-page popup: page 1 = spell description, page 2 = lore + blaze render.
+
         spells.addWidget(WidgetDefinition.simple(
                 "fireball",
                 new ResourceLocation("minecraft", "textures/item/blaze_powder.png"),
                 200, 150,
                 "Fireball",
-                PopupContent.titledPages(
-                        new String[]{ "Overview", "Requirements" },
-                        new List[]{
-                                // Page 1 — description
-                                List.of(
-                                        PopupContent.text(
-                                                "Launches a concentrated fireball in the\n" +
-                                                        "direction you face.\n\n" +
-                                                        "Cost: 30 mana\nCooldown: 2s\nDamage: 8 \u2764"
-                                        )
-                                ),
-                                // Page 2 — task flavour with renders
-                                List.of(
-                                        PopupContent.text("To unlock Fireball you must first\nprove your mastery of fire."),
-                                        PopupContent.entityRender("minecraft:blaze",  "Blaze — slay 5"),
-                                        PopupContent.itemRender("minecraft:blaze_rod", "Blaze Rod — collect 2")
-                                )
-                        }
+                PopupContent.page(
+                        PopupContent.pml("""
+            <text size="lg" bold color="gold">Fireball</text>
+ 
+            <text margin-top="6">
+              Launches a concentrated fireball in the direction you face.
+            </text>
+ 
+            <panel bg="dark" border="accent" corner="sharp" margin-top="8" padding="6">
+              <text size="sm" color="dim">Spell statistics</text>
+              <list bullet="dash" margin-top="4" indent="10">
+                <item>Cost: <span color="mana" bold>30 mana</span></item>
+                <item>Cooldown: <span bold>2 s</span></item>
+                <item>Damage: <span color="red" bold>8 ❤</span></item>
+              </list>
+            </panel>
+ 
+            <divider margin-top="10"/>
+ 
+            <text size="sm" color="dim" margin-top="2" align="center">
+              To unlock, you must prove mastery of fire.
+            </text>
+ 
+            <panel direction="horizontal" margin-top="8" gap="8">
+              <render type="entity" id="minecraft:blaze"    size="40"
+                      label="Blaze" label-side="below" bg="dark" border="accent"/>
+              <render type="item"   id="minecraft:blaze_rod" size="32"
+                      label="Blaze Rod" label-side="below" bg="dark" border="dim"/>
+            </panel>
+        """)
                 ),
-                null, // no widget deps
-                false, // no confirmation checkbox needed
-                TaskRequirement.kill("minecraft:blaze",    5, "Blazes slain"),
+                null,   // no widget dependencies
+                false,  // no confirmation required
+                TaskRequirement.kill("minecraft:blaze",     5, "Blazes slain"),
                 TaskRequirement.item("minecraft:blaze_rod", 2, "Blaze rods collected")
         ));
 
@@ -147,21 +161,20 @@ public class TabRegistry {
                 2048, 1024);
 
         // ── Mind Probe ────────────────────────────────────────────────────────
+        // ── Mind Probe / Psychic Awakening ────────────────────────────────────────
         psychic.addWidget(WidgetDefinition.simple(
-                "mind_probe",
+                "psychic_awakening",
                 new ResourceLocation("minecraft", "textures/item/compass.png"),
                 250, 200,
-                "Mind Probe",
+                "Psychic Awakening",
                 PopupContent.page(
                         PopupContent.text(
-                                "Reveals the health, armor, and active\neffects of the targeted entity.\n\n" +
-                                        "Range: 32 blocks\nCost: 10 mana"
-                        ),
-                        PopupContent.entityRender("minecraft:enderman", "Enderman — probe 3")
+                                "To use psychic abilities you first have to discover spells using the research table. " +
+                                        "Once unlocked, press [" + KeyInit.castingKey.getTranslatedKeyMessage().getString() + "] to cast them."
+                        )
                 ),
-                null,
-                false,
-                TaskRequirement.kill("minecraft:enderman", 3, "Endermen probed")
+                null, // No dependencies
+                false // No confirmation checkbox
         ));
 
         // ── Telekinesis ───────────────────────────────────────────────────────
@@ -208,7 +221,7 @@ public class TabRegistry {
                                 "Creates a brief psychic barrier that\nnegates the next hit within 1 second.\n\n" +
                                         "Cost: 25 mana\nCooldown: 6s"
                         ),
-                        PopupContent.entityRender("minecraft:amethyst_cluster", "Amethyst Cluster — break 20"),
+                        PopupContent.itemRender("minecraft:amethyst_cluster", "Amethyst Cluster"),
                         PopupContent.itemRender("minecraft:amethyst_shard",    "Amethyst Shard — collect 3")
                 ),
                 new String[]{ "telekinesis" },
@@ -233,8 +246,7 @@ public class TabRegistry {
                 new ResourceLocation("psychic", "textures/gui/widgets/fills/chaos_star.png"),
                 0, 0,
                 "The Warp",
-                "Reveals the health, armor, and active effects\nof the targeted entity.\n\n" +
-                        "Range: 32 blocks\nCost: 10 mana",
+                "The Warp, a world of chaos separated from the overworld by a thin veil. This veil is stronger in some places than others, and exessive use of magic can weaken it causing various side effects. The Warp is a dangerous place with demons, gods and an unpredictable landscape. It is primarily built out of 8 different lairs each with its own demons forms gods and things for you to conquer or become.",
                 48, 48
         ));
 

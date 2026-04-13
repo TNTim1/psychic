@@ -1,6 +1,8 @@
 package net.tntim1.psychic.widget;
 
 import net.minecraft.resources.ResourceLocation;
+import net.tntim1.psychic.widget.pml.PmlParser;
+import net.tntim1.psychic.widget.pml.PmlNode;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -10,30 +12,36 @@ import java.util.List;
 /**
  * Describes the full content of a widget's popup.
  *
- * <p>A popup is made up of one or more {@link Page}s. Each page holds an
- * ordered list of {@link Block}s — self-contained content units that the
- * popup renderer draws top-to-bottom. Pages are navigated with Prev / Next
- * arrows in the popup header.
+ * <p>This is the updated version of PopupContent.  The only addition is the
+ * {@link BlockType#PML_SOURCE} variant and the {@link #pml(String)} factory.
+ * All existing factories and types are unchanged.
  *
- * <h3>Quick-build examples</h3>
+ * <h3>PML quick-start</h3>
  * <pre>
- *   // Single info page
  *   PopupContent.page(
- *       PopupContent.text("Fireball launches a...\nCost: 30 mana"),
- *       PopupContent.entityRender("minecraft:blaze", "Blaze")
- *   )
- *
- *   // Two pages
- *   PopupContent.pages(
- *       List.of(PopupContent.text("Overview text")),
- *       List.of(PopupContent.text("Details"), PopupContent.image("psychic:textures/..."))
+ *       PopupContent.pml("""
+ *           &lt;text size="lg" bold color="gold"&gt;Fireball&lt;/text&gt;
+ *           &lt;text margin-top="4"&gt;
+ *             Launches a concentrated fireball. Cost: &lt;span color="mana"&gt;30 mana&lt;/span&gt;
+ *           &lt;/text&gt;
+ *           &lt;panel bg="dark" border="accent" margin-top="8" padding="6"&gt;
+ *             &lt;text size="sm" color="dim"&gt;Stats&lt;/text&gt;
+ *             &lt;list bullet="dash"&gt;
+ *               &lt;item&gt;Damage: &lt;span color="red" bold&gt;8 hearts&lt;/span&gt;&lt;/item&gt;
+ *               &lt;item&gt;Cooldown: 2s&lt;/item&gt;
+ *             &lt;/list&gt;
+ *           &lt;/panel&gt;
+ *           &lt;render type="entity" id="minecraft:blaze" size="48"
+ *                   label="Blaze — slay 5" label-side="right"
+ *                   bg="dark" border="accent" margin-top="10"/&gt;
+ *       """)
  *   )
  * </pre>
  */
 public class PopupContent {
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Block — one unit of rendered content inside a page
+    // Block
     // ─────────────────────────────────────────────────────────────────────────
 
     public enum BlockType {
@@ -43,13 +51,17 @@ public class PopupContent {
         LIST,
         /**
          * A rendered item/mob sprite with an optional label shown on hover.
-         * {@code resourceId} = registry name, e.g. "minecraft:blaze".
-         * {@code data} = display name shown on hover.
-         * {@code isEntity} = true → mob model, false → item sprite.
+         * {@code resourceId} = registry name.  {@code isEntity} selects model vs sprite.
          */
         ENTITY_RENDER,
         /** A full-width texture image. {@code data} = ResourceLocation string. */
         IMAGE,
+        /**
+         * A PML markup source string.  The renderer parses and draws it via
+         * {@link net.tntim1.psychic.widget.pml.PmlRenderer}.
+         * {@code data} = raw PML text.
+         */
+        PML_SOURCE,
     }
 
     public static final class Block {
@@ -61,11 +73,32 @@ public class PopupContent {
         /** True → render as entity model; false → render as item sprite. */
         public final boolean isEntity;
 
+        /**
+         * Cached parse result for PML_SOURCE blocks.  Populated lazily on first
+         * render call; {@code null} until then.
+         */
+        private volatile List<PmlNode> _pmlCache;
+
         private Block(BlockType type, String data, String resourceId, boolean isEntity) {
             this.type       = type;
             this.data       = data;
             this.resourceId = resourceId;
             this.isEntity   = isEntity;
+        }
+
+        /**
+         * Returns the cached (or freshly parsed) PML node tree for a
+         * {@link BlockType#PML_SOURCE} block.  Calling this on any other block
+         * type returns an empty list.
+         */
+        public List<PmlNode> pmlNodes() {
+            if (type != BlockType.PML_SOURCE) return List.of();
+            if (_pmlCache == null) {
+                synchronized (this) {
+                    if (_pmlCache == null) _pmlCache = PmlParser.parse(data);
+                }
+            }
+            return _pmlCache;
         }
     }
 
@@ -84,20 +117,20 @@ public class PopupContent {
     }
 
     /**
-     * Entity/mob render block. Shows a spinning entity model.
+     * Entity/mob render block.
      *
      * @param entityId registry name, e.g. {@code "minecraft:blaze"}
-     * @param label    hover tooltip text, e.g. {@code "Blaze"}
+     * @param label    hover tooltip text
      */
     public static Block entityRender(String entityId, String label) {
         return new Block(BlockType.ENTITY_RENDER, label, entityId, true);
     }
 
     /**
-     * Item sprite render block. Shows the item's 2-D sprite.
+     * Item sprite render block.
      *
      * @param itemId registry name, e.g. {@code "minecraft:blaze_rod"}
-     * @param label  hover tooltip text, e.g. {@code "Blaze Rod"}
+     * @param label  hover tooltip text
      */
     public static Block itemRender(String itemId, String label) {
         return new Block(BlockType.ENTITY_RENDER, label, itemId, false);
@@ -106,6 +139,18 @@ public class PopupContent {
     /** Full-width image block. */
     public static Block image(ResourceLocation texture) {
         return new Block(BlockType.IMAGE, texture.toString(), null, false);
+    }
+
+    /**
+     * PML markup block.
+     *
+     * <p>The PML string is parsed lazily on first render.  Use Java text blocks
+     * ({@code """..."""}) for multi-line PML to keep the source readable.
+     *
+     * @param pmlSource raw PML markup
+     */
+    public static Block pml(String pmlSource) {
+        return new Block(BlockType.PML_SOURCE, pmlSource, null, false);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

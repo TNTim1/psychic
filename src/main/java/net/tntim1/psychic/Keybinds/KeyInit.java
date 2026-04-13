@@ -8,11 +8,11 @@ import org.lwjgl.glfw.GLFW;
 
 public class KeyInit {
     public static final String CATEGORY = "key.categories.psychic";
-    public static KeyMapping exampleHotKey;
+    public static KeyMapping castingKey;
     public static KeyMapping confirmKey; // Our new key
 
     public static void register(final RegisterKeyMappingsEvent event) {
-        exampleHotKey = new KeyMapping(
+        castingKey = new KeyMapping(
                 "key.psychic.cast_menu",
                 KeyConflictContext.UNIVERSAL,
                 InputConstants.Type.KEYSYM,
@@ -28,7 +28,7 @@ public class KeyInit {
                 CATEGORY
         );
 
-        event.register(exampleHotKey);
+        event.register(castingKey);
         event.register(confirmKey);
     }
 }

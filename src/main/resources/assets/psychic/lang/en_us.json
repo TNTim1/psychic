@@ -3,5 +3,6 @@
   "key.psychic.cast_menu": "Open casting screen",
   "key.psychic.confirm": "Confirm Spell Selection",
   "psychic.casting_screen.cast_instruction": "Enter a spell, press %s to confirm",
-  "item.psychic.liber_chaotica": "Liber Chaotica"
+  "item.psychic.liber_chaotica": "Liber Chaotica",
+  "block.psychic.research_table": "Research Table"
 }

@@ -18,6 +18,7 @@ import net.tntim1.psychic.network.ActivateWidgetPacket;
 import net.tntim1.psychic.network.ModPackets;
 import net.tntim1.psychic.player_data.ClientKnowledge;
 import net.tntim1.psychic.widget.*;
+import net.tntim1.psychic.widget.pml.PmlRenderer;   // ← NEW IMPORT
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.lwjgl.glfw.GLFW;
@@ -47,6 +48,7 @@ public class LiberChaoticaScreen extends Screen {
     private static final int C_POPUP_BORDER = 0xFF392420;
     private static final int C_TEXT         = 0xFF000000;
     private static final int C_TEXT_DIM     = 0xFF000000;
+    private double  dragLastX, dragLastY;
 
     // Task progress bar colours
     private static final int C_BAR_TRACK  = 0xFF1a1208;
@@ -59,16 +61,18 @@ public class LiberChaoticaScreen extends Screen {
             { { 0xAAAA66, 0x4B0082,   0, 200 }, { 0x4B0082, 0x0066CC, 200, 400 },
                     { 0x0066CC, 0x00994D, 400, 550 }, { 0x00994D, 0xCC2200, 550, 700 },
                     { 0xCC2200, 0xFFCC44, 700, 850 }, { 0xFFCC44, 0xAAAA66, 850, 1000 } },
+
             { { 0x000810, 0x001830,   0, 250 }, { 0x001830, 0x003D6B, 250, 450 },
                     { 0x003D6B, 0x007A8A, 450, 620 }, { 0x007A8A, 0x00C8C8, 620, 800 },
                     { 0x00C8C8, 0x000810, 800, 1000 } },
+
             { { 0xAAAA66, 0x4B0082,   0, 200 }, { 0x4B0082, 0x0066CC, 200, 400 },
                     { 0x0066CC, 0x00994D, 400, 550 }, { 0x00994D, 0xCC2200, 550, 700 },
                     { 0xCC2200, 0xFFCC44, 700, 850 }, { 0xFFCC44, 0xAAAA66, 850, 1000 } },
     };
 
     private static final float ARM_COUNT   = 8.0f;
-    private static final float GROWTH_RATE = 800.0f;
+    private static final float GROWTH_RATE = 400.0f;
 
     // ── layout ────────────────────────────────────────────────────────────────
     private static final int TAB_H     = 26;
@@ -93,7 +97,6 @@ public class LiberChaoticaScreen extends Screen {
     private float zoom    = 1.0f;
 
     private boolean dragging;
-    private double  dragLastX, dragLastY;
     private int     hoveredWidget = -1;
 
     // ── popup state ───────────────────────────────────────────────────────────
@@ -102,9 +105,7 @@ public class LiberChaoticaScreen extends Screen {
     private static final class PopupState {
         final WidgetDefinition widget;
         int page = 0;
-        /** True once the player has ticked the confirmation checkbox. */
         boolean confirmed = false;
-        /** Index of the render block currently being hovered (-1 = none). */
         int hoveredRenderIdx = -1;
 
         PopupState(WidgetDefinition widget) { this.widget = widget; }
@@ -164,7 +165,7 @@ public class LiberChaoticaScreen extends Screen {
             String title = tabs.get(activeTab).name.toUpperCase();
             gfx.drawString(font, title, frameX + 12, frameY + 12, C_ACCENT, false);
             int lineY = frameY + HEADER_H + 2;
-            gfx.fill(frameX + 10, lineY, frameX + frameW - 10, lineY + 1, C_TEXT);
+            gfx.fill(frameX +5, lineY, frameX + frameW-5, lineY + 1, C_TEXT);
         }
         renderTabBar(gfx, mx, my);
         renderCanvas(gfx, mx, my, pt);
@@ -394,9 +395,9 @@ public class LiberChaoticaScreen extends Screen {
                 float dist = Mth.sqrt(Mth.square(to[0]-from[0]) + Mth.square(to[1]-from[1]));
                 int segments = Math.max(12, (int)(dist/6f));
                 drawGradientLine(gfx, from[0], from[1], to[0], to[1],
-                        0xAACC5500, 0xAAFFD700, 2.2f, 0.0f, 1.0f, 1.2f, segments, eased, partialTick);
+                        0xAACC5500, 0xAAFFD700, 2.2f, 0.0f, 1.0f, 1.7f, segments, eased, partialTick);
                 drawGradientLine(gfx, from[0], from[1], to[0], to[1],
-                        0xFFFFFFFF, 0xAAFFD700, 0.6f, 0.0f, 0.8f, 0.5f, segments, eased, partialTick);
+                        0xFFFFFFFF, 0xAAFFD700, 0.6f, 0.0f, 0.8f, 0.7f, segments, eased, partialTick);
             }
         }
     }
@@ -406,38 +407,60 @@ public class LiberChaoticaScreen extends Screen {
                                   float alphaMult, float jitter, int segments,
                                   float maxProgress, float partialTick) {
         if (maxProgress <= 0.001f) return;
-        Matrix4f matrix   = gfx.pose().last().pose();
-        var      consumer = gfx.bufferSource().getBuffer(RenderType.gui());
-        float a1 = ((color1>>24)&0xFF)/255f*alphaMult, r1 = ((color1>>16)&0xFF)/255f,
-                g1 = ((color1>>8)&0xFF)/255f, b1 = (color1&0xFF)/255f;
-        float a2 = ((color2>>24)&0xFF)/255f*alphaMult, r2 = ((color2>>16)&0xFF)/255f,
-                g2 = ((color2>>8)&0xFF)/255f, b2 = (color2&0xFF)/255f;
-        float cp1x = x1+(x2-x1)*0.5f, cp1y = y1;
-        float cp2x = x1+(x2-x1)*0.5f, cp2y = y2;
-        float lastX = x1, lastY = y1;
+
+        Matrix4f matrix = gfx.pose().last().pose();
+        var consumer = gfx.bufferSource().getBuffer(RenderType.gui());
+
+        float a1 = ((color1 >> 24) & 0xFF) / 255f * alphaMult, r1 = ((color1 >> 16) & 0xFF) / 255f, g1 = ((color1 >> 8) & 0xFF) / 255f, b1 = (color1 & 0xFF) / 255f;
+        float a2 = ((color2 >> 24) & 0xFF) / 255f * alphaMult, r2 = ((color2 >> 16) & 0xFF) / 255f, g2 = ((color2 >> 8) & 0xFF) / 255f, b2 = (color2 & 0xFF) / 255f;
+
+        float cp1x = x1 + (x2 - x1) * 0.5f, cp1y = y1;
+        float cp2x = x1 + (x2 - x1) * 0.5f, cp2y = y2;
+
         float baseThickness = thicknessMult * zoom;
         float flowTime = (minecraft.level.getGameTime() + partialTick) * 0.15f;
-        int animSegs = Math.max(1, (int)(segments * maxProgress));
-        for (int i = 1; i <= animSegs; i++) {
-            float t = (float)i/segments, invT = 1f-t;
-            float nextX = invT*invT*invT*x1+3*invT*invT*t*cp1x+3*invT*t*t*cp2x+t*t*t*x2;
-            float nextY = invT*invT*invT*y1+3*invT*invT*t*cp1y+3*invT*t*t*cp2y+t*t*t*y2;
-            float dx = nextX-lastX, dy = nextY-lastY;
-            float len = Mth.sqrt(dx*dx+dy*dy);
-            if (len < 0.01f) continue;
-            float nx = -dy/len, ny = dx/len;
-            float disp = Mth.sin(flowTime+i*0.4f)*jitter*zoom;
-            nextX += nx*disp; nextY += ny*disp;
+        int drawCount = Math.max(1, (int) (segments * maxProgress));
+
+        float lastCleanX = x1, lastCleanY = y1;
+        float lastJitterX = x1, lastJitterY = y1;
+        float frequency = 8.0f;
+
+        for (int i = 1; i <= drawCount; i++) {
+            float t = (float) i / segments;
+            float invT = 1f - t;
+
+            float nextCleanX = invT * invT * invT * x1 + 3 * invT * invT * t * cp1x + 3 * invT * t * t * cp2x + t * t * t * x2;
+            float nextCleanY = invT * invT * invT * y1 + 3 * invT * invT * t * cp1y + 3 * invT * t * t * cp2y + t * t * t * y2;
+
+            float dx = nextCleanX - lastCleanX;
+            float dy = nextCleanY - lastCleanY;
+            float len = Mth.sqrt(dx * dx + dy * dy);
+            if (len < 0.001f) continue;
+
+            float nx = -dy / len;
+            float ny = dx / len;
+
+            float waveInput = (flowTime * 0.5f) + (t * frequency);
+            float triangle = Math.abs((waveInput % 1.0f) - 0.5f) * 4.0f - 1.0f;
+            float noise = (float)(Math.sin(t * 100f + flowTime * 2f) * 0.2f);
+            float disp = (triangle + noise) * jitter * zoom;
+
+            float nextJitterX = nextCleanX + (nx * disp);
+            float nextJitterY = nextCleanY + (ny * disp);
+
             float alpha = Mth.lerp(t, a1, a2);
-            if (maxProgress < 0.95f && i >= animSegs-2)
-                alpha *= 1f-(float)(i-(animSegs-2))/3f;
-            float cr = Mth.lerp(t,r1,r2), cg = Mth.lerp(t,g1,g2), cb = Mth.lerp(t,b1,b2);
-            float ox1 = nx*(baseThickness/2f), oy1 = ny*(baseThickness/2f);
-            consumer.vertex(matrix,lastX-ox1,lastY-oy1,z).color(cr,cg,cb,alpha).endVertex();
-            consumer.vertex(matrix,lastX+ox1,lastY+oy1,z).color(cr,cg,cb,alpha).endVertex();
-            consumer.vertex(matrix,nextX+ox1,nextY+oy1,z).color(cr,cg,cb,alpha).endVertex();
-            consumer.vertex(matrix,nextX-ox1,nextY-oy1,z).color(cr,cg,cb,alpha).endVertex();
-            lastX = nextX; lastY = nextY;
+            if (maxProgress < 0.99f && i >= drawCount - 2) alpha *= (1f - (float) (i - (drawCount - 2)) / 3f);
+
+            float cr = Mth.lerp(t, r1, r2), cg = Mth.lerp(t, g1, g2), cb = Mth.lerp(t, b1, b2);
+            float halfWidth = baseThickness / 2f;
+
+            consumer.vertex(matrix, lastJitterX - nx * halfWidth, lastJitterY - ny * halfWidth, z).color(cr, cg, cb, alpha).endVertex();
+            consumer.vertex(matrix, lastJitterX + nx * halfWidth, lastJitterY + ny * halfWidth, z).color(cr, cg, cb, alpha).endVertex();
+            consumer.vertex(matrix, nextJitterX + nx * halfWidth, nextJitterY + ny * halfWidth, z).color(cr, cg, cb, alpha).endVertex();
+            consumer.vertex(matrix, nextJitterX - nx * halfWidth, nextJitterY - ny * halfWidth, z).color(cr, cg, cb, alpha).endVertex();
+
+            lastCleanX = nextCleanX; lastCleanY = nextCleanY;
+            lastJitterX = nextJitterX; lastJitterY = nextJitterY;
         }
     }
 
@@ -465,7 +488,7 @@ public class LiberChaoticaScreen extends Screen {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // POPUP — multi-page, multi-block, entity renders, checkbox confirmation
+    // POPUP
     // ─────────────────────────────────────────────────────────────────────────
 
     private void renderPopup(GuiGraphics gfx, int mx, int my, float pt) {
@@ -482,7 +505,6 @@ public class LiberChaoticaScreen extends Screen {
         int px   = canvasX + canvasW - popW;
         int py   = canvasY;
 
-        // Shadow + background
         gfx.fill(px+5, py+5, px+popW+5, py+popH+5, 0x22000000);
         gfx.fill(px, py, px+popW, py+popH, C_POPUP_BG);
         drawBorder(gfx, px, py, popW, popH, 2, C_POPUP_BORDER);
@@ -496,25 +518,18 @@ public class LiberChaoticaScreen extends Screen {
         RenderSystem.disableBlend();
         gfx.drawString(font, w.label, px+20, py+6, C_ACCENT, false);
 
-        // Close button
         boolean closeHov = mx >= px+popW-14 && mx < px+popW && my >= py && my < py+20;
         gfx.drawString(font, "×", px+popW-10, py+6, closeHov ? 0x000000 : C_TEXT, false);
 
-        // Page navigation (when more than 1 page)
         if (pageCount > 1) {
             int navY = py + 21;
             gfx.fill(px, navY, px+popW, navY+14, 0x33000000);
             String pageLabel = (popup.page+1) + " / " + pageCount;
             int plw = font.width(pageLabel);
 
-            // Prev arrow
             boolean prevHov = popup.page > 0 && mx >= px+4 && mx < px+14 && my >= navY+2 && my < navY+12;
             gfx.drawString(font, "<", px+6, navY+3, (popup.page > 0) ? (prevHov ? 0xFFFFAA44 : C_ACCENT) : 0xFF888888, false);
-
-            // Page counter
             gfx.drawString(font, pageLabel, px+(popW-plw)/2, navY+3, C_ACCENT, false);
-
-            // Next arrow
             boolean nextHov = popup.page < pageCount-1 && mx >= px+popW-14 && mx < px+popW-4 && my >= navY+2 && my < navY+12;
             gfx.drawString(font, ">", px+popW-12, navY+3, (popup.page < pageCount-1) ? (nextHov ? 0xFFFFAA44 : C_ACCENT) : 0xFF888888, false);
         }
@@ -522,64 +537,60 @@ public class LiberChaoticaScreen extends Screen {
         int headerTotalH = 21 + (pageCount > 1 ? 14 : 0);
         int contentY     = py + headerTotalH + 4;
 
-        // ── Body area ─────────────────────────────────────────────────────────
-        // Tasks + button only appear on the last page.
         boolean isLastPage  = (popup.page == pageCount - 1);
         boolean hasTasks    = isLastPage && depsOk && w.hasTasks() && !isUnlocked;
         int taskZoneH       = hasTasks ? (w.taskRequirements.size() * POPUP_TASK_ROW_H + 4) : 0;
-        // Confirmation checkbox row
         boolean needsConfirm   = hasTasks && w.requiresConfirmation && ClientKnowledge.areTasksMet(w.id);
         int confirmRowH        = needsConfirm ? 20 : 0;
-        // Button always visible on last page; hidden on earlier pages.
         int bottomButtonH      = isLastPage ? 22 : 0;
         int bodyH              = popH - headerTotalH - 4 - taskZoneH - confirmRowH - bottomButtonH - 4;
         int bodyW              = popW - 12;
         int bx                 = px + 6;
 
         if (!depsOk) {
-            // ── Locked: show missing deps ─────────────────────────────────────
             int cy = contentY;
             int lh = font.lineHeight + 2;
             gfx.drawString(font, "§cRequires:", bx, cy, C_TEXT, false);
             cy += lh;
             for (String dep : missing) {
-                if (cy + lh > contentY + bodyH + taskZoneH) break;
+                if (cy + lh > contentY + bodyH) break;
                 gfx.fill(bx, cy+lh/2-1, bx+3, cy+lh/2+2, 0xFFCC4444);
                 gfx.drawString(font, dep, bx+8, cy, 0xFFCC4444, false);
                 cy += lh;
             }
         } else {
-            // ── Unlocked deps: render current page blocks ─────────────────────
+            // ── Render current page blocks ─────────────────────────────────────
             PopupContent.Page currentPage = content.pages.get(popup.page);
-
-            // Reset hovered render
             popup.hoveredRenderIdx = -1;
 
             int cy = contentY;
+            int lh = font.lineHeight + 2;
+
             for (int bi = 0; bi < currentPage.blocks.size(); bi++) {
                 PopupContent.Block block = currentPage.blocks.get(bi);
-                int lh = font.lineHeight + 2;
 
+                // ── UPDATED SWITCH — includes PML_SOURCE ──────────────────────
                 switch (block.type) {
+
                     case TEXT -> {
-                        cy = renderBlockText(gfx, block.data, bx, cy, bodyW, contentY+bodyH, lh);
+                        cy = renderBlockText(gfx, block.data, bx, cy, bodyW, contentY + bodyH, lh);
                     }
+
                     case LIST -> {
-                        cy = renderBlockList(gfx, block.data, bx, cy, bodyW, contentY+bodyH, lh);
+                        cy = renderBlockList(gfx, block.data, bx, cy, bodyW, contentY + bodyH, lh);
                     }
+
                     case IMAGE -> {
-                        cy = renderBlockImage(gfx, block.data, bx, cy, bodyW, contentY+bodyH);
+                        cy = renderBlockImage(gfx, block.data, bx, cy, bodyW, contentY + bodyH);
                     }
+
                     case ENTITY_RENDER -> {
-                        // Render a RENDER_SZ × RENDER_SZ thumbnail with hover name
                         int sz = RENDER_SZ;
                         if (cy + sz + 2 > contentY + bodyH) break;
 
-                        // Check hover on this render block
-                        boolean renderHov = mx >= bx && mx < bx+sz && my >= cy && my < cy+sz;
+                        boolean renderHov = mx >= bx && mx < bx + sz && my >= cy && my < cy + sz;
                         if (renderHov) popup.hoveredRenderIdx = bi;
 
-                        // Background pill
                         gfx.fill(bx-2, cy-2, bx+sz+2, cy+sz+2, 0x33000000);
                         drawBorder(gfx, bx-2, cy-2, sz+4, sz+4, 1, C_POPUP_BORDER);
 
@@ -589,19 +600,33 @@ public class LiberChaoticaScreen extends Screen {
                             renderItemThumbnail(gfx, block.resourceId, bx, cy, sz);
                         }
 
-                        // Hover tooltip with background
-                        if (renderHov && block.data != null && !block.data.isEmpty()) {
+                        if (renderHov && block.data != null && !block.data.isEmpty())
                             drawTooltip(gfx, block.data, mx, my);
-                        }
 
                         cy += sz + 4;
                     }
+
+                    // ── NEW: PML_SOURCE block ─────────────────────────────────
+                    case PML_SOURCE -> {
+                        cy = PmlRenderer.render(
+                                gfx,
+                                font,
+                                block.pmlNodes(),   // lazily parsed + cached
+                                bx,
+                                cy,
+                                bodyW,
+                                contentY + bodyH,
+                                pt
+                        );
+                    }
                 }
+                // ── END SWITCH ────────────────────────────────────────────────
+
                 if (cy >= contentY + bodyH) break;
             }
         }
 
-        // ── Task progress bars (last page only) ──────────────────────────────
+        // ── Task progress bars ────────────────────────────────────────────────
         if (isLastPage && hasTasks) {
             int taskY = py + popH - bottomButtonH - confirmRowH - 4 - taskZoneH;
             gfx.fill(px+6, taskY-2, px+popW-6, taskY-1, C_ACCENT);
@@ -626,10 +651,10 @@ public class LiberChaoticaScreen extends Screen {
             }
         }
 
-        // ── Confirmation checkbox (last page only) ───────────────────────────
+        // ── Confirmation checkbox ─────────────────────────────────────────────
         if (isLastPage && needsConfirm) {
             int checkY = py + popH - bottomButtonH - 4 - confirmRowH;
-            gfx.fill(px+6, checkY-1, px+popW-6, checkY, C_ACCENT); // separator
+            gfx.fill(px+6, checkY-1, px+popW-6, checkY, C_ACCENT);
 
             boolean checkHov = mx >= bx && mx < bx+16 && my >= checkY+2 && my < checkY+18;
             ResourceLocation checkTex = popup.confirmed
@@ -642,7 +667,7 @@ public class LiberChaoticaScreen extends Screen {
             gfx.drawString(font, "Confirm activation", bx+18, checkY+5, C_ACCENT, false);
         }
 
-        // ── Bottom action button (last page only) ────────────────────────────
+        // ── Bottom action button ──────────────────────────────────────────────
         if (isLastPage) {
             int btnW = 90, btnH = 16;
             int btnX = px + (popW - btnW) / 2;
@@ -655,7 +680,6 @@ public class LiberChaoticaScreen extends Screen {
             } else if (w.hasTasks()) {
                 boolean allDone = ClientKnowledge.areTasksMet(w.id);
                 if (allDone && (!w.requiresConfirmation || popup.confirmed)) {
-                    // Clickable activate
                     boolean hov = mx >= btnX && mx < btnX+btnW && my >= btnY && my < btnY+btnH;
                     renderBottomButton(gfx, "ACTIVATE ✔", hov ? 0xFFc4a080 : C_BORDER, true, btnX, btnY, btnW, btnH, mx, my);
                 } else if (allDone) {
@@ -667,12 +691,11 @@ public class LiberChaoticaScreen extends Screen {
                 boolean hov = mx >= btnX && mx < btnX+btnW && my >= btnY && my < btnY+btnH;
                 renderBottomButton(gfx, "ACTIVATE", hov ? 0xFFc4a080 : C_BORDER, true, btnX, btnY, btnW, btnH, mx, my);
             }
-        } // end isLastPage
+        }
     }
 
-    // ── Block renderers ───────────────────────────────────────────────────────
+    // ── Block renderers (legacy — still used for TEXT / LIST / IMAGE / ENTITY_RENDER) ──
 
-    /** Returns the new Y position after rendering. */
     private int renderBlockText(GuiGraphics gfx, String text, int x, int y, int maxW, int maxY, int lh) {
         int cy = y;
         for (String raw : text.split("\n"))
@@ -709,10 +732,6 @@ public class LiberChaoticaScreen extends Screen {
         }
     }
 
-    /**
-     * Renders a spinning entity model into a small on-screen box.
-     * Falls back to a coloured placeholder if the entity type isn't available.
-     */
     private void renderEntityThumbnail(GuiGraphics gfx, String entityId,
                                        int x, int y, int sz, float partialTick) {
         try {
@@ -726,50 +745,32 @@ public class LiberChaoticaScreen extends Screen {
                 renderMissingPlaceholder(gfx, x, y, sz); return;
             }
 
-            // Slow Y-axis spin driven by game time
             float yRot = (minecraft.level.getGameTime() + partialTick) * 2.0f;
-
-            // Smaller scale so the model fits inside the box.
-            // Positive Y = right-side-up. Negative X corrects horizontal mirroring.
             float scale = sz * 0.35f;
 
             com.mojang.blaze3d.vertex.PoseStack poseStack = gfx.pose();
             poseStack.pushPose();
-
-            // Centre horizontally; sit feet at ~85% down the box so the
-            // whole model appears inside. Z=50 pushes into the depth buffer
-            // so the entity renders above the GUI background.
             poseStack.translate(x + sz / 2.0, y + sz * 0.85, 50.0);
-            poseStack.scale(scale, -scale, scale);  // -X mirrors correctly; +Y = upright
+            poseStack.scale(scale, -scale, scale);
             poseStack.mulPose(com.mojang.math.Axis.YP.rotationDegrees(yRot));
 
             EntityRenderDispatcher dispatcher = minecraft.getEntityRenderDispatcher();
             dispatcher.setRenderShadow(false);
-
             net.minecraft.client.renderer.MultiBufferSource.BufferSource buffers =
                     minecraft.renderBuffers().bufferSource();
 
             RenderSystem.enableDepthTest();
-            dispatcher.render(
-                    living,
-                    0.0, 0.0, 0.0,
-                    yRot,
-                    partialTick,
-                    poseStack,
-                    buffers,
-                    net.minecraft.client.renderer.LightTexture.pack(15, 15)
-            );
+            dispatcher.render(living, 0.0, 0.0, 0.0, yRot, partialTick, poseStack, buffers,
+                    net.minecraft.client.renderer.LightTexture.pack(15, 15));
             buffers.endBatch();
             dispatcher.setRenderShadow(true);
             RenderSystem.disableDepthTest();
-
             poseStack.popPose();
         } catch (Exception e) {
             renderMissingPlaceholder(gfx, x, y, sz);
         }
     }
 
-    /** Renders an item sprite scaled into an sz×sz box. */
     private void renderItemThumbnail(GuiGraphics gfx, String itemId, int x, int y, int sz) {
         try {
             ResourceLocation rl  = new ResourceLocation(itemId);
@@ -777,7 +778,6 @@ public class LiberChaoticaScreen extends Screen {
             ItemStack        stk = new ItemStack(itm);
             if (stk.isEmpty()) { renderMissingPlaceholder(gfx, x, y, sz); return; }
 
-            // Items are always rendered at 16×16; scale via matrix
             float scale = sz / 16.0f;
             gfx.pose().pushPose();
             gfx.pose().translate(x, y, 0);
@@ -806,7 +806,7 @@ public class LiberChaoticaScreen extends Screen {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // INPUT
+    // INPUT (unchanged from original)
     // ─────────────────────────────────────────────────────────────────────────
 
     @Override
@@ -818,7 +818,6 @@ public class LiberChaoticaScreen extends Screen {
             int popW = POPUP_W, popH = canvasH;
             int ppx = canvasX + canvasW - popW, ppy = canvasY;
 
-            // Close button
             if (mx >= ppx+popW-14 && mx < ppx+popW && my >= ppy && my < ppy+20) {
                 popup = null; return true;
             }
@@ -826,7 +825,6 @@ public class LiberChaoticaScreen extends Screen {
             boolean inside = mx >= ppx && mx < ppx+popW && my >= ppy && my < ppy+popH;
             if (!inside) { popup = null; return true; }
 
-            // Page navigation
             int pageCount  = w.popupContent.pageCount();
             int headerTotalH = 21 + (pageCount > 1 ? 14 : 0);
             if (pageCount > 1) {
@@ -837,7 +835,6 @@ public class LiberChaoticaScreen extends Screen {
                 }
             }
 
-            // Checkbox
             boolean needsConfirm = depsOk && w.hasTasks() && !isUnlocked
                     && w.requiresConfirmation && ClientKnowledge.areTasksMet(w.id);
             if (needsConfirm) {
@@ -850,7 +847,6 @@ public class LiberChaoticaScreen extends Screen {
                 }
             }
 
-            // Bottom button — only active on the last page
             boolean isLastPageClick = (popup.page == w.popupContent.pageCount() - 1);
             if (isLastPageClick) {
                 int btnW = 90, btnH = 16;
@@ -865,10 +861,9 @@ public class LiberChaoticaScreen extends Screen {
                 }
             }
 
-            return true; // consume all clicks inside popup
+            return true;
         }
 
-        // Tab bar
         int tabW = 24, tabH = 24, spacing = 2;
         for (int i = 0; i < tabs.size(); i++) {
             int tx = frameX+frameW, ty = frameY+(i*(tabH+spacing));
@@ -933,7 +928,6 @@ public class LiberChaoticaScreen extends Screen {
             onClose(); return true;
         }
         if (popup != null) {
-            // Allow left/right arrow to page through popup
             int pc = popup.widget.popupContent.pageCount();
             if (key == GLFW.GLFW_KEY_LEFT  && popup.page > 0)    { popup.page--; return true; }
             if (key == GLFW.GLFW_KEY_RIGHT && popup.page < pc-1) { popup.page++; return true; }
@@ -981,15 +975,11 @@ public class LiberChaoticaScreen extends Screen {
         gfx.fill(x+w-s,   y+h-1,   x+w,   y+h,   col); gfx.fill(x+w-1,   y+h-s,   x+w,   y+h,   col);
     }
 
-    /**
-     * Draws a tooltip with a filled background (same style as the original hover
-     * label on canvas widgets).
-     */
     private void drawTooltip(GuiGraphics gfx, String text, int mx, int my) {
         int tw = font.width(text) + 8, th = font.lineHeight + 6;
         int tx = Mth.clamp(mx+12, frameX, frameX+frameW-tw);
         int ty = Mth.clamp(my-th-4, frameY+TAB_H, frameY+frameH-th);
-        gfx.fill(tx, ty, tx+tw, ty+th, C_POPUP_BG);         // filled background
+        gfx.fill(tx, ty, tx+tw, ty+th, C_POPUP_BG);
         drawBorder(gfx, tx, ty, tw, th, 1, C_ACCENT);
         gfx.drawString(font, text, tx+4, ty+3, C_TEXT, false);
     }
