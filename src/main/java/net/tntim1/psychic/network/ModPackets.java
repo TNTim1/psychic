@@ -7,6 +7,10 @@ import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
 import net.tntim1.psychic.Psychic;
+import net.tntim1.psychic.block.entity.CompletePuzzlePacket;
+import net.tntim1.psychic.block.entity.NoPuzzlePacket;
+import net.tntim1.psychic.block.entity.RequestPuzzlePacket;
+import net.tntim1.psychic.block.entity.StartPuzzlePacket;
 import net.tntim1.psychic.network.SyncSpellHistoryPacket;
 
 public class ModPackets {
@@ -51,6 +55,33 @@ public class ModPackets {
                 .decoder(SyncTaskProgressPacket::decode)
                 .encoder(SyncTaskProgressPacket::encode)
                 .consumerMainThread(SyncTaskProgressPacket::handle)
+                .add();
+
+        net.messageBuilder(NoPuzzlePacket.class, id(), NetworkDirection.PLAY_TO_CLIENT)
+                .decoder(NoPuzzlePacket::new)
+                .encoder(NoPuzzlePacket::toBytes)
+                .consumerMainThread(NoPuzzlePacket::handle)
+                .add();
+
+        net.messageBuilder(StartPuzzlePacket.class, id(), NetworkDirection.PLAY_TO_CLIENT)
+                .decoder(StartPuzzlePacket::new)
+                .encoder(StartPuzzlePacket::toBytes)
+                .consumerMainThread(StartPuzzlePacket::handle)
+                .add();
+
+        net.messageBuilder(CompletePuzzlePacket.class, id(), NetworkDirection.PLAY_TO_SERVER)
+                .decoder(CompletePuzzlePacket::new)
+                .encoder(CompletePuzzlePacket::toBytes)
+                .consumerMainThread(CompletePuzzlePacket::handle)
+                .add();
+
+// ── CLIENT → SERVER ───────────────────────────────────────────────────
+// (Add this alongside ActivateWidgetPacket)
+
+        net.messageBuilder(RequestPuzzlePacket.class, id(), NetworkDirection.PLAY_TO_SERVER)
+                .decoder(RequestPuzzlePacket::new)
+                .encoder(RequestPuzzlePacket::toBytes)
+                .consumerMainThread(RequestPuzzlePacket::handle)
                 .add();
 
         // Inside ModPackets.register()

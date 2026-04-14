@@ -208,6 +208,20 @@ public class TabRegistry {
                 80 // Just the size
         ));
         psychic.addSpell(new SpellWidgetDefinition(
+                "fire_beam",
+                "firebeam Pattern",
+                "A basic pyromancy spell.",
+                List.of(3, 4, 4, 6, 6, 2),
+                80 // Just the size
+        ));
+        psychic.addSpell(new SpellWidgetDefinition(
+                "firebeam",
+                "firebeam Pattern",
+                "A basic pyromancy spell.",
+                List.of(1, 4, 7, 6, 6, 2),
+                80 // Just the size
+        ));
+        psychic.addSpell(new SpellWidgetDefinition(
                 "fireball4",
                 "Fireball Pattern",
                 "A basic pyromancy spell.",

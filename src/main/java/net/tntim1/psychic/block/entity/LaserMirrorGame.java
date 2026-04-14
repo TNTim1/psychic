@@ -8,43 +8,17 @@ import org.joml.Matrix4f;
 
 import java.util.*;
 
-/**
- * LaserMirrorGame – a Minecraft MiniGame ported from the Python "Laser Game".
- *
- * <h3>Piece types</h3>
- * <ul>
- *   <li><b>emitter</b>  – fires a laser in a fixed direction (always locked/static)</li>
- *   <li><b>mirror</b>   – reflects 90°; vertical dir (\) or horizontal dir (/)</li>
- *   <li><b>target</b>   – L-shaped corner piece; absorbs the beam from its valid-entry
- *                         side (win condition), bends and re-emits from the bend side</li>
- *   <li><b>splitter</b> – passes the beam straight through AND reflects a copy 90°</li>
- *   <li><b>arch</b>     – two parallel rails; lets the beam pass if aligned with its axis</li>
- *   <li><b>blocker</b>  – solid obstacle; lets nothing through (used as wall segments)</li>
- * </ul>
- *
- * <h3>Direction encoding</h3>
- * <pre>
- *   UP    = { 0, -1 }   RIGHT = { 1,  0 }
- *   DOWN  = { 0,  1 }   LEFT  = {-1,  0 }
- * </pre>
- *
- * <h3>Difficulties</h3>
- * <pre>
- *   0 – Easy   : mirrors + 1 locked target, open grid, 1 emitter
- *   1 – Medium : mirrors + splitter + arch + locked target, central walls, 1 emitter
- *   2 – Hard   : all piece types, 3 locked targets cross-wired, 3 emitters, maze walls
- * </pre>
- *
- * <h3>Win condition (mirrors Python check_win)</h3>
- * <ul>
- *   <li>All locked targets activated</li>
- *   <li>All arches activated</li>
- *   <li>Entire inventory spent (nothing left to place)</li>
- *   <li>Every non-emitter piece on the board activated</li>
- *   <li>Total targets hit ≥ target goal</li>
- * </ul>
- */
 public class LaserMirrorGame extends MiniGame {
+    private String spellId;
+
+    public void setSpellId(String spellId) {
+        this.spellId = spellId;
+    }
+
+    public String getSpellId() {
+        return spellId;
+    }
+
 
     // =========================================================================
     // Direction constants
@@ -148,7 +122,6 @@ public class LaserMirrorGame extends MiniGame {
                     }
                     break;
                 }
-                // ── Splitter ──────────────────────────────────────────────
                 case "splitter": {
                     activatedColors.add(color);
                     out.add(incoming);   // straight-through copy
@@ -157,7 +130,6 @@ public class LaserMirrorGame extends MiniGame {
                     if (reflected != null) out.add(reflected);   // reflected copy
                     break;
                 }
-
                 // ── Arch ──────────────────────────────────────────────────
                 case "arch": {
                     int[] opposite = {-dir[0], -dir[1]};
@@ -254,47 +226,46 @@ public class LaserMirrorGame extends MiniGame {
         this.gridCols = SIZE;
         this.gridRows = SIZE;
         this.grid = new Piece[SIZE][SIZE];
-
         this.won = false;
 
         emitters.clear();
         goalConnections.clear();
+        activeConnections.clear(); // Ensure previous state is wiped
 
-        // Colors (ARGB)
         int[] colors = {
-                0xFFFF3232, // 1
-                0xFFFFA500, // 2
-                0xFFFFFF32, // 3
-                0xFF32FF32, // 4
-                0xFF32FFFF, // 5
-                0xFF3264FF, // 6
-                0xFFAA32FF, // 7
-                0xFFFF32AA  // 8
+                0xFFFF3232, 0xFFFFA500, 0xFFFFFF32, 0xFF32FF32,
+                0xFF32FFFF, 0xFF3264FF, 0xFFAA32FF, 0xFFFF32AA
         };
+
         inventory.clear();
-        inventory.put("mirror", 99);
-        inventory.put("splitter", 99);
+        inventory.put("mirror", 15);    // Limited for actual gameplay challenge
+        inventory.put("splitter", 5);
+        inventory.put("arch", 3);
 
         int id = 1;
 
-        // LEFT SIDE (bottom → top)
+        // LEFT SIDE (IDs 1, 2, 3, 4)
         for (int y = SIZE - 1; y >= 0; y -= 2) {
             emitters.add(new LaserNode(0, y, RIGHT, colors[id - 1], id));
             grid[0][y] = new Piece("emitter", RIGHT, true, true, colors[id - 1]);
             id++;
         }
 
-        // RIGHT SIDE (top → bottom)
+        // RIGHT SIDE (IDs 5, 6, 7, 8)
         for (int y = 0; y < SIZE; y += 2) {
             emitters.add(new LaserNode(SIZE - 1, y, LEFT, colors[id - 1], id));
             grid[SIZE - 1][y] = new Piece("emitter", LEFT, true, true, colors[id - 1]);
             id++;
         }
 
-        // Example goal:
-        goalConnections.add(Arrays.asList(1, 6));
-        goalConnections.add(Arrays.asList(2, 5));
+        // --- DYNAMIC GOALS ---
+        // Fetch the goals from the LaserPuzzle registry based on current spellId
+        LaserPuzzle puzzleData = LaserPuzzle.get(this.getSpellId());
+        if (puzzleData != null) {
+            this.goalConnections.addAll(puzzleData.goals);
+        }
     }
+
 
 
 
@@ -397,7 +368,6 @@ public class LaserMirrorGame extends MiniGame {
     private static final int COL_STATIC = 0xFFFFBE00;  // gold
     private static final int COL_PIECE  = 0xFFC8D2E6;  // light blue-grey
     private static final int COL_ACTIVE = 0xFF32FF96;  // green
-    private static final int COL_LASER  = 0xFFFF3232;  // red
 
     private static final int SIZE = 8;
 
@@ -490,23 +460,17 @@ public class LaserMirrorGame extends MiniGame {
                 g.fill(nx - 2, ny - 2, nx + 2, ny + 2,0xFF3C3C46);
                 break;
             }
-
-            // ── Splitter ──────────────────────────────────────────────────
             case "splitter": {
-                // Crosshair
-                g.fill(cx - s, cy - 1, cx + s, cy + 1, drawCol);
-                g.fill(cx - 1, cy - s, cx + 1, cy + s, drawCol);
-                // Corner dots (circle approximation)
-                g.fill(cx-s, cy-s, cx-s+2, cy-s+2, drawCol);
-                g.fill(cx+s-2, cy-s, cx+s, cy-s+2, drawCol);
-                g.fill(cx-s, cy+s-2, cx-s+2, cy+s, drawCol);
-                g.fill(cx+s-2, cy+s-2, cx+s, cy+s, drawCol);
-                // Direction pointer
-                int pCol = drawCol;
-                drawGradientLine(g, cx, cy, cx+p.dir[0]*s, cy+p.dir[1]*s, pCol, pCol, 2.0f, 0f, 1f, 0f, 1);
+                // Vertical dir (\) or horizontal dir (/)
+                boolean bslash = Arrays.equals(p.dir, UP) || Arrays.equals(p.dir, DOWN);
+                if (bslash)
+                    drawGradientLine(g, px+2, py+CELL-3, px+CELL-3, py+2,
+                            0x44C8D2E6, 0x44C8D2E6, 1.4f, 0f, 1f, 0f, 1);
+                else
+                    drawGradientLine(g, px+2, py+2, px+CELL-3, py+CELL-3,
+                            0x44C8D2E6, 0x44C8D2E6, 1.4f, 0f, 1f, 0f, 1);
                 break;
             }
-
             // ── Arch ──────────────────────────────────────────────────────
             case "arch": {
                 boolean horiz = Arrays.equals(p.dir, RIGHT) || Arrays.equals(p.dir, LEFT);
@@ -571,16 +535,14 @@ public class LaserMirrorGame extends MiniGame {
                 if (grid[x][y] != null) { grid[x][y].hitColors.clear(); grid[x][y].activatedColors.clear(); }
 
         // Seed the queue with every emitter on the board
-        Queue<int[]> queue = new ArrayDeque<>();  // { cx, cy, dx, dy, argb }
+        // Seed the queue: { x, y, dx, dy, color, sourceId }
+        Queue<int[]> queue = new ArrayDeque<>();
         for (int x = 0; x < gridCols; x++) {
             for (int y = 0; y < gridRows; y++) {
                 Piece p = grid[x][y];
                 if (p != null && "emitter".equals(p.type)) {
                     int id = getEmitterId(x, y);
-                    LaserNode node = emitters.stream().filter(n -> n.id == id).findFirst().orElse(null);
-                    if (node != null) {
-                        queue.add(new int[]{ x, y, p.dir[0], p.dir[1], node.color });
-                    }
+                    queue.add(new int[]{ x, y, p.dir[0], p.dir[1], p.color, id });
                 }
             }
         }
@@ -594,11 +556,14 @@ public class LaserMirrorGame extends MiniGame {
             int cx = start[0], cy = start[1];
             int[] d = { start[2], start[3] };
             int argb = start[4];
+            int sourceId = start[5];
 
             // Walk straight until we leave the grid
             while (cx >= 0 && cx < gridCols && cy >= 0 && cy < gridRows) {
 
-                long key = ((long) cx << 40) | ((long) cy << 20) | ((long)(d[0]+2) << 10) | (d[1]+2);
+                // Include sourceId in the key to allow multiple beams to overlap
+                long key = ((long) sourceId << 50) | ((long) cx << 30) | ((long) cy << 15) | ((long)(d[0]+2) << 5) | (d[1]+2);
+
                 if (visited.contains(key)) break;
                 visited.add(key);
 
@@ -629,10 +594,8 @@ public class LaserMirrorGame extends MiniGame {
                 // ─────────────────────────────
                 // CONNECTION DETECTION (FIXED)
                 // ─────────────────────────────
-                if (piece != null && "emitter".equals(piece.type)) {
+                if (piece != null && "emitter".equals(piece.type)) if (piece != null && "emitter".equals(piece.type)) {
                     int targetId = getEmitterId(cx, cy);
-                    int sourceId = getEmitterId(start[0], start[1]);
-
                     if (sourceId != targetId) {
                         activeConnections.add(connectionKey(sourceId, targetId));
                     }
@@ -640,43 +603,40 @@ public class LaserMirrorGame extends MiniGame {
                 // ─────────────────────────────
                 // HANDLE PIECE
                 // ─────────────────────────────
+                // ─────────────────────────────
+// HANDLE PIECE
+// ─────────────────────────────
+                // ─────────────────────────────
+// HANDLE PIECE
+// ─────────────────────────────
                 if (piece != null) {
-
-                    // 🟢 ALWAYS draw incoming (edge → center)
+                    // 1. Draw the incoming beam (edge to center)
                     laserSegments.add(new int[]{ sx, sy, cpx, cpy, argb });
 
                     List<int[]> outputs = piece.getOutputs(d, argb);
 
-                    // If absorbed → stop AFTER drawing incoming
-                    if (outputs.isEmpty()) break;
-
-                    for (int i = 0; i < outputs.size(); i++) {
-                        int[] outDir = outputs.get(i);
-
+                    // 2. Add ALL outputs to the queue
+                    for (int[] outDir : outputs) {
+                        // Draw the outgoing segment (center to edge)
                         int ex = cpx + outDir[0] * CELL / 2;
                         int ey = cpy + outDir[1] * CELL / 2;
-
-                        // 🔵 OUTGOING (center → edge)
                         laserSegments.add(new int[]{ cpx, cpy, ex, ey, argb });
 
-                        if (i == 0) {
-                            d = outDir;
-                        } else {
-                            queue.add(new int[]{
-                                    cx + outDir[0],
-                                    cy + outDir[1],
-                                    outDir[0],
-                                    outDir[1],
-                                    argb
-                            });
-                        }
+                        // Queue the next cell
+                        queue.add(new int[]{
+                                cx + outDir[0],
+                                cy + outDir[1],
+                                outDir[0],
+                                outDir[1],
+                                argb,
+                                sourceId
+                        });
                     }
 
-                    cx += d[0];
-                    cy += d[1];
-                    continue;
+                    // 3. CRITICAL: Stop processing this specific branch segment here.
+                    // The queue will take over for all resulting branches.
+                    break;
                 }
-
                 // ─────────────────────────────
                 // EMPTY TILE → continue straight
                 // ─────────────────────────────
