@@ -15,7 +15,7 @@ public class WorldSpellData extends SavedData {
     }
 
     private void defineHardcodedSpells() {
-        spellPatterns.put("fireball", createPattern(new int[][]{{1, 2}, {2, 3}}));
+        spellPatterns.put("fireball", createPattern(new int[][]{{1, 4},{4, 6},{6, 2}}));
         spellPatterns.put("teleport", createPattern(new int[][]{{1, 5}, {4, 8}, {2, 3}}));
     }
 

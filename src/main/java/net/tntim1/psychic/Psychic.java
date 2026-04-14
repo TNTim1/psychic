@@ -1,9 +1,15 @@
 package net.tntim1.psychic;
 
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.logging.LogUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.MenuScreens;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.common.capabilities.Capability;
 import net.minecraftforge.common.capabilities.CapabilityManager;
@@ -11,6 +17,7 @@ import net.minecraftforge.common.capabilities.CapabilityToken;
 import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -25,10 +32,11 @@ import net.tntim1.psychic.block.ModBlocks;
 import net.tntim1.psychic.block.entity.ModBlockEntities;
 import net.tntim1.psychic.block.entity.ModMenus;
 import net.tntim1.psychic.block.entity.ResearchTableScreen;
+import net.tntim1.psychic.capability.PsychicCapability;
 import net.tntim1.psychic.item.ModItems;
-import net.tntim1.psychic.network.ModPackets;
+import net.tntim1.psychic.network.*;
 import net.tntim1.psychic.player_data.ClientKnowledge;
-import net.tntim1.psychic.player_data.PsychicData;
+import net.tntim1.psychic.capability.PsychicData;
 import org.slf4j.Logger;
 
 @Mod(Psychic.MODID)
@@ -66,7 +74,46 @@ public class Psychic
     public void onServerStarting(ServerStartingEvent event) {}
 
     @SubscribeEvent
-    public void onRegisterCommands(RegisterCommandsEvent event) {}
+    public void onRegisterCommands(RegisterCommandsEvent event) {
+        // Access the dispatcher from the event object
+        event.getDispatcher().register(Commands.literal("psychic")
+                .requires(source -> source.hasPermission(2))
+                .then(Commands.literal("unlockspell")
+                        .then(Commands.argument("target", EntityArgument.player())
+                                .then(Commands.argument("spellId", StringArgumentType.string())
+                                        .executes(context -> {
+                                            ServerPlayer player = EntityArgument.getPlayer(context, "target");
+                                            String spellId = StringArgumentType.getString(context, "spellId");
+
+                                            // 1. Persist to server-side player data (this is where you call your capability)
+                                            player.getCapability(PsychicCapability.PSYCHIC_DATA_CAP).ifPresent(data -> {
+                                                data.unlockSpell(spellId, player);
+                                                // This method (in PsychicData) MUST send the SyncSpellHistoryPacket
+                                            });
+
+                                            context.getSource().sendSuccess(() ->
+                                                    Component.literal("Unlocked " + spellId + " for " + player.getScoreboardName()), true);
+                                            return 1;
+                                        })
+                                )
+                        )
+                )
+        );
+    }
+    @SubscribeEvent
+    public void onClientLogout(ClientPlayerNetworkEvent.LoggingOut event) { // Removed static
+        ClientKnowledge.resetClientData();
+    }
+
+    @SubscribeEvent
+    public void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) { // Removed static
+        if (event.getEntity() instanceof ServerPlayer player) {
+            PsychicData data = PsychicData.get(player);
+            ModPackets.sendToPlayer(new SyncTaskProgressPacket(data.taskProgress.snapshot()), player);
+            ModPackets.sendToPlayer(new SyncKnowledgePacket(data.getUnlockedIds()), player);
+            ModPackets.sendToPlayer(new SyncSpellHistoryPacket(data.getUnlockedSpellsOrder()), player);
+        }
+    }
 
     @Mod.EventBusSubscriber(modid = MODID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
     public static class ClientModEvents {

@@ -1,0 +1,22 @@
+{
+  "levels": [
+    {
+      "id": 1,
+      "cols": 12, "rows": 9,
+      "targetGoal": 2,
+      "emitter": { "x": 0, "y": 1, "dir": "RIGHT" },
+      "inventory": { "mirror": 4, "target": 1, "arch": 1 },
+      "objects": [
+        { "x": 11, "y": 2, "type": "target", "dir": "UP", "isStatic": true, "isLocked": true }
+      ]
+    },
+    {
+      "id": 2,
+      "cols": 10, "rows": 10,
+      "targetGoal": 1,
+      "emitter": { "x": 5, "y": 0, "dir": "DOWN" },
+      "inventory": { "mirror": 2, "splitter": 1 },
+      "objects": []
+    }
+  ]
+}

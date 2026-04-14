@@ -4,13 +4,19 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.common.capabilities.RegisterCapabilitiesEvent;
 import net.minecraftforge.event.AttachCapabilitiesEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.tntim1.psychic.network.ModPackets;
 import net.tntim1.psychic.network.SyncKnowledgePacket;
-import net.tntim1.psychic.player_data.PsychicData;
+import net.tntim1.psychic.capability.PsychicData;
+import net.tntim1.psychic.network.SyncSpellHistoryPacket;
+import net.tntim1.psychic.player_data.ClientKnowledge;
+
+import java.util.ArrayList;
 
 /**
  * Handles lifecycle events for the PsychicData capability.
@@ -86,9 +92,21 @@ public class PsychicCapabilityEventHandler {
 
         private static void syncToClient(Player player) {
             if (!(player instanceof ServerPlayer sp)) return;
-            sp.getCapability(PsychicCapability.PSYCHIC_DATA_CAP).ifPresent(data ->
-                    SyncKnowledgePacket.sendToPlayer(sp, data)
-            );
+            sp.getCapability(PsychicCapability.PSYCHIC_DATA_CAP).ifPresent(data -> {
+                // 1. Sync general knowledge (for isUnlocked checks)
+                ModPackets.sendToPlayer(new SyncKnowledgePacket(data.getUnlockedIds()), sp);
+
+                // 2. Sync the SPIRAL order (CRITICAL for it to show up after relog)
+                ModPackets.sendToPlayer(new SyncSpellHistoryPacket(data.getUnlockedSpellsOrder()), sp);
+            });
+        }
+    }
+    @Mod.EventBusSubscriber(modid = "psychic", bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
+    public static class ClientForgeEvents {
+        @SubscribeEvent
+        public static void onLoggingOut(PlayerEvent.PlayerLoggedOutEvent event) {
+            // Clear the static list so the next world starts fresh
+            ClientKnowledge.setUnlockOrder(new ArrayList<>());
         }
     }
 }

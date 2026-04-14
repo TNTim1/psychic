@@ -44,10 +44,7 @@ public class ResearchTableScreen extends AbstractContainerScreen<ResearchTableMe
                 addButtons();
             }).bounds(x + 75, y + 150, 100, 20).build());
         } else {
-            this.addRenderableWidget(Button.builder(Component.literal("Quit"), b -> {
-                currentState = State.SELECTOR;
-                addButtons();
-            }).bounds(x + 5, y + 5, 40, 20).build());
+
         }
     }
 

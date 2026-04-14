@@ -1,0 +1,45 @@
+{
+  "levels": [
+    {
+      "id": 1,
+      "cols": 14,
+      "rows": 10,
+      "targetGoal": 3,
+      "emitter": { "x": 0, "y": 1, "dir": "RIGHT" },
+      "inventory": {
+        "mirror": 5,
+        "splitter": 2,
+        "target": 2,
+        "arch": 2
+      },
+      "objects": [
+        { "x": 13, "y": 8, "type": "target", "dir": "LEFT", "isStatic": true, "isLocked": true },
+        { "x": 0, "y": 5, "type": "target", "dir": "RIGHT", "isStatic": true, "isLocked": true },
+        { "x": 13, "y": 4, "type": "target", "dir": "LEFT", "isStatic": true, "isLocked": true },
+        { "x": 13, "y": 1, "type": "emitter", "dir": "LEFT", "isStatic": true, "isLocked": true },
+        { "x": 0, "y": 8, "type": "emitter", "dir": "RIGHT", "isStatic": true, "isLocked": true },
+        { "x": 7, "y": 2, "type": "arch", "dir": "DOWN", "isStatic": false, "isLocked": true },
+        { "x": 6, "y": 7, "type": "arch", "dir": "RIGHT", "isStatic": false, "isLocked": true },
+
+
+        { "x": 3, "y": 4, "type": "blocker", "dir": "RIGHT", "isStatic": true, "isLocked": true },
+        { "x": 4, "y": 4, "type": "blocker", "dir": "RIGHT", "isStatic": true, "isLocked": true },
+        { "x": 5, "y": 4, "type": "blocker", "dir": "RIGHT", "isStatic": true, "isLocked": true },
+        { "x": 6, "y": 4, "type": "blocker", "dir": "RIGHT", "isStatic": true, "isLocked": true },
+
+        { "x": 8, "y": 5, "type": "blocker", "dir": "RIGHT", "isStatic": true, "isLocked": true },
+        { "x": 9, "y": 5, "type": "blocker", "dir": "RIGHT", "isStatic": true, "isLocked": true },
+        { "x": 10, "y": 5, "type": "blocker", "dir": "RIGHT", "isStatic": true, "isLocked": true },
+        { "x": 11, "y": 5, "type": "blocker", "dir": "RIGHT", "isStatic": true, "isLocked": true },
+
+        { "x": 7, "y": 2, "type": "blocker", "dir": "RIGHT", "isStatic": true, "isLocked": true },
+        { "x": 7, "y": 3, "type": "blocker", "dir": "RIGHT", "isStatic": true, "isLocked": true },
+        { "x": 7, "y": 4, "type": "blocker", "dir": "RIGHT", "isStatic": true, "isLocked": true },
+
+        { "x": 6, "y": 6, "type": "blocker", "dir": "RIGHT", "isStatic": true, "isLocked": true },
+        { "x": 6, "y": 7, "type": "blocker", "dir": "RIGHT", "isStatic": true, "isLocked": true },
+        { "x": 6, "y": 8, "type": "blocker", "dir": "RIGHT", "isStatic": true, "isLocked": true }
+      ]
+    }
+  ]
+}

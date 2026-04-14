@@ -4,7 +4,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraftforge.common.capabilities.*;
 import net.minecraftforge.common.util.LazyOptional;
-import net.tntim1.psychic.player_data.PsychicData;
+import net.tntim1.psychic.capability.PsychicData;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -62,13 +62,15 @@ public class PsychicDataProvider implements ICapabilitySerializable<CompoundTag>
     @Override
     public CompoundTag serializeNBT() {
         CompoundTag tag = new CompoundTag();
-        data.save(tag);
+        // Changed from .save(tag) to .saveNBTData(tag)
+        data.saveNBTData(tag);
         return tag;
     }
 
     @Override
     public void deserializeNBT(CompoundTag tag) {
-        data.load(tag);
+        // Changed from .load(tag) to .loadNBTData(tag)
+        data.loadNBTData(tag);
     }
 
 }

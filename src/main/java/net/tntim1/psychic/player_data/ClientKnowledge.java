@@ -108,4 +108,28 @@ public class ClientKnowledge {
 
     public record UnlockToast(String widgetLabel, long createdAt) {}
     public record TaskToast(String widgetLabel, String taskLabel, boolean completed, long createdAt) {}
+    // In your Player Data / Capability class
+    private final List<String> unlockedSpellsOrder = new ArrayList<>();
+
+    private static List<String> spellOrder = new ArrayList<>();
+
+    // Add this to be called by your Packet Handler
+    public static void setSpellOrder(List<String> order) {
+        spellOrder = new ArrayList<>(order);
+    }
+
+    public static List<String> getSpellOrder() {
+        return spellOrder;
+    }
+    public static void setUnlockOrder(List<String> order) {
+        spellOrder = new ArrayList<>(order);
+    }
+    public static void resetClientData() {
+        unlockedIds.clear();
+        TASK_PROGRESS.clear();
+        spellOrder.clear();
+        // Clear toast queues too so old notifications don't pop up
+        UNLOCK_TOASTS.clear();
+        TASK_TOASTS.clear();
+    }
 }

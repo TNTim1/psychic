@@ -5,7 +5,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkDirection;
 import net.minecraftforge.network.NetworkEvent;
 import net.tntim1.psychic.player_data.ClientKnowledge;
-import net.tntim1.psychic.player_data.PsychicData;
+import net.tntim1.psychic.capability.PsychicData;
 
 import java.util.HashSet;
 import java.util.Set;

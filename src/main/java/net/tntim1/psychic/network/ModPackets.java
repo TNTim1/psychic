@@ -7,6 +7,7 @@ import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
 import net.tntim1.psychic.Psychic;
+import net.tntim1.psychic.network.SyncSpellHistoryPacket;
 
 public class ModPackets {
     private static SimpleChannel INSTANCE;
@@ -50,6 +51,14 @@ public class ModPackets {
                 .decoder(SyncTaskProgressPacket::decode)
                 .encoder(SyncTaskProgressPacket::encode)
                 .consumerMainThread(SyncTaskProgressPacket::handle)
+                .add();
+
+        // Inside ModPackets.register()
+        // ADD THIS HERE:
+        net.messageBuilder(SyncSpellHistoryPacket.class, id(), NetworkDirection.PLAY_TO_CLIENT)
+                .decoder(SyncSpellHistoryPacket::decode)
+                .encoder(SyncSpellHistoryPacket::encode)
+                .consumerMainThread(SyncSpellHistoryPacket::handle)
                 .add();
 
         // ── CLIENT → SERVER ───────────────────────────────────────────────────

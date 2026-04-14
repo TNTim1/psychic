@@ -415,30 +415,39 @@ public class CastingUi extends Screen {
 
     private void processSpellCheck() {
         String foundSpell = null;
+        boolean existsInGame = false;
 
-        // In Minecraft, logic usually happens on the Server.
-        // If you are in Singleplayer, you can access the Integrated Server.
+        // 1. First, check if the pattern matches ANY spell in the game data
         if (Minecraft.getInstance().getSingleplayerServer() != null) {
             ServerLevel level = Minecraft.getInstance().getSingleplayerServer().overworld();
             WorldSpellData data = WorldSpellData.get(level);
 
-            // Iterate through all known spells and check if the current sequence matches
             for (String name : data.getSpellPatterns().keySet()) {
                 if (data.checkMatch(name, this.sequence)) {
                     foundSpell = name;
+                    existsInGame = true;
                     break;
                 }
             }
         }
 
-        if (foundSpell != null) {
-            // Spell found! Clear lines and start the rhythm game
-            this.completedLines.clear();
-            startRhythmGame(foundSpell);
-            Minecraft.getInstance().player.displayClientMessage(
-                    Component.literal("§b✔ Casting " + foundSpell + "..."), true);
+        if (existsInGame) {
+            // 2. Check if the player actually has this specific spell unlocked
+            // We use the ClientKnowledge class we built earlier
+            if (net.tntim1.psychic.player_data.ClientKnowledge.isUnlocked(foundSpell)) {
+                // Success: Clear lines and start the rhythm game
+                this.completedLines.clear();
+                startRhythmGame(foundSpell);
+                Minecraft.getInstance().player.displayClientMessage(
+                        Component.literal("§b✔ Casting " + foundSpell + "..."), true);
+            } else {
+                // Failure: Pattern is right, but knowledge is missing
+                clearSequence();
+                Minecraft.getInstance().player.displayClientMessage(
+                        Component.literal("§6⚠ You haven't researched this spell yet!"), true);
+            }
         } else {
-            // No spell found. Clear everything so the player can try again
+            // Failure: The pattern doesn't correspond to any spell
             clearSequence();
             Minecraft.getInstance().player.displayClientMessage(
                     Component.literal("§c✘ Invalid Pattern"), true);

@@ -1,0 +1,22 @@
+{
+  "levels": [
+    {
+      "id": 1,
+      "cols": 10,
+      "rows": 8,
+      "targetGoal": 1,
+      "emitter": { "x": 0, "y": 3, "dir": "RIGHT" },
+      "inventory": {
+        "mirror": 3,
+        "target": 1
+      },
+      "objects": [
+        {
+          "x": 9, "y": 3,
+          "type": "target", "dir": "LEFT",
+          "isStatic": true, "isLocked": true
+        }
+      ]
+    }
+  ]
+}

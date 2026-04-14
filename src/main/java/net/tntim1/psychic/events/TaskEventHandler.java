@@ -13,7 +13,7 @@ import net.tntim1.psychic.network.ModPackets;
 import net.tntim1.psychic.network.SyncTaskProgressPacket;
 import net.tntim1.psychic.network.WidgetAutoActivatePacket;
 import net.tntim1.psychic.network.TaskNotificationPacket;
-import net.tntim1.psychic.player_data.PsychicData;
+import net.tntim1.psychic.capability.PsychicData;
 import net.tntim1.psychic.player_data.TaskProgress;
 import net.tntim1.psychic.widget.TabDefinition;
 import net.tntim1.psychic.widget.TabRegistry;
@@ -98,24 +98,23 @@ public class TaskEventHandler {
 
                 // Check if ALL tasks for this widget are now complete
                 if (areAllTasksMet(widget, progress)) {
-                    // Auto-activate on the server
-                    data.unlock(widget.id);
-                    // Notify client: "Widget X unlocked!"
-                    if (areAllTasksMet(widget, progress)) {
-                        data.unlock(widget.id);
+                    data.unlock(widget.id); // First unlock
+
                         ModPackets.sendToPlayer(new WidgetAutoActivatePacket(widget.id), player);
-                    }
+
                 }
             }
         }
 
         if (anyChange) {
+            // 1. Mark for saving (if you added setDirty() to PsychicData)
             data.setDirty();
-            // Sync full progress snapshot to the client so the GUI reflects changes
-            if (anyChange) {
-                data.setDirty();
-                ModPackets.sendToPlayer(new SyncTaskProgressPacket(progress.snapshot()), player);
-            }
+
+            // 2. Sync the progress numbers to the client (for the UI bars)
+            ModPackets.sendToPlayer(new SyncTaskProgressPacket(progress.snapshot()), player);
+
+            // 3. Sync the unlocked status (so the player can cast the spell immediately)
+            net.tntim1.psychic.network.SyncKnowledgePacket.sendToPlayer(player, data);
         }
     }
 

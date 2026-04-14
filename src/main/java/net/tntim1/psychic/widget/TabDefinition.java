@@ -26,6 +26,11 @@ public class TabDefinition {
     public final List<WidgetDefinition> widgets = new ArrayList<>();
     public final List<DecoraterDefinition> decorators = new ArrayList<>();
     public final ResourceLocation icon; // Add this
+    public final List<SpellWidgetDefinition> spells = new java.util.ArrayList<>();
+
+    public void addSpell(SpellWidgetDefinition spell) {
+        this.spells.add(spell);
+    }
 
     public TabDefinition(String name, ResourceLocation icon, int canvasWidth, int canvasHeight) {
         this.name = name;

@@ -10,6 +10,16 @@ import java.util.List;
 public class TabRegistry {
 
     private static final List<TabDefinition> TABS = new ArrayList<>();
+    public static SpellWidgetDefinition findSpellById(String id) {
+        for (TabDefinition tab : TABS) {
+            for (SpellWidgetDefinition s : tab.spells) {
+                if (s.id.equals(id)) {
+                    return s;
+                }
+            }
+        }
+        return null;
+    }
 
     public static WidgetDefinition findById(String id) {
         for (TabDefinition tab : TABS)
@@ -165,7 +175,7 @@ public class TabRegistry {
         psychic.addWidget(WidgetDefinition.simple(
                 "psychic_awakening",
                 new ResourceLocation("minecraft", "textures/item/compass.png"),
-                250, 200,
+                0, 0,
                 "Psychic Awakening",
                 PopupContent.page(
                         PopupContent.text(
@@ -176,59 +186,65 @@ public class TabRegistry {
                 null, // No dependencies
                 false // No confirmation checkbox
         ));
-
-        // ── Telekinesis ───────────────────────────────────────────────────────
-        // Three-page popup: overview, mechanics, unlock requirement.
-        psychic.addWidget(WidgetDefinition.simple(
-                "telekinesis",
-                new ResourceLocation("minecraft", "textures/item/writable_book.png"),
-                650, 150,
-                "Telekinesis",
-                PopupContent.titledPages(
-                        new String[]{ "Overview", "Mechanics", "Unlock" },
-                        new List[]{
-                                List.of(
-                                        PopupContent.text("Channel psychic force to pull objects\ntoward you from a distance.")
-                                ),
-                                List.of(
-                                        PopupContent.list(
-                                                "Pull item or mob from up to 20 blocks",
-                                                "Heavier mobs require more mana",
-                                                "Cannot pull bosses",
-                                                "Cost: 15\u201350 mana depending on mass"
-                                        )
-                                ),
-                                List.of(
-                                        PopupContent.text("The chorus fruit teaches the\nessence of teleportation."),
-                                        PopupContent.itemRender("minecraft:chorus_fruit", "Chorus Fruit — collect 1")
-                                )
-                        }
-                ),
-                new String[]{ "mind_probe" },
-                false,
-                TaskRequirement.item("minecraft:chorus_fruit", 1, "Chorus fruit obtained")
+        psychic.addSpell(new SpellWidgetDefinition(
+                "fireball",
+                "Fireball Pattern",
+                "A basic pyromancy spell.",
+                List.of(1, 4, 4, 6, 6, 2),
+                80 // Just the size
+        ));
+        psychic.addSpell(new SpellWidgetDefinition(
+                "fireball2",
+                "Fireball Pattern",
+                "A basic pyromancy spell.",
+                List.of(1, 4, 4, 6, 6, 2),
+                80 // Just the size
+        ));
+        psychic.addSpell(new SpellWidgetDefinition(
+                "fireball3",
+                "Fireball Pattern",
+                "A basic pyromancy spell.",
+                List.of(1, 4, 4, 6, 6, 2),
+                80 // Just the size
+        ));
+        psychic.addSpell(new SpellWidgetDefinition(
+                "fireball4",
+                "Fireball Pattern",
+                "A basic pyromancy spell.",
+                List.of(1, 4, 4, 6, 6, 2),
+                80 // Just the size
+        ));
+        psychic.addSpell(new SpellWidgetDefinition(
+                "fireball5",
+                "Fireball Pattern",
+                "A basic pyromancy spell.",
+                List.of(1, 4, 4, 6, 6, 2),
+                80 // Just the size
+        ));
+        psychic.addSpell(new SpellWidgetDefinition(
+                "fireball6",
+                "Fireball Pattern",
+                "A basic pyromancy spell.",
+                List.of(1, 4, 4, 6, 6, 2),
+                80 // Just the size
+        ));
+        psychic.addSpell(new SpellWidgetDefinition(
+                "fireball7",
+                "Fireball Pattern",
+                "A basic pyromancy spell.",
+                List.of(1, 4, 4, 6, 6, 2),
+                80 // Just the size
+        ));
+        psychic.addSpell(new SpellWidgetDefinition(
+                "fireball8",
+                "Fireball Pattern",
+                "A basic pyromancy spell.",
+                List.of(1, 4, 4, 6, 6, 2),
+                80 // Just the size
         ));
 
-        // ── Psychic Shield ────────────────────────────────────────────────────
-        // Requires confirmation.
-        psychic.addWidget(WidgetDefinition.simple(
-                "psychic_shield",
-                new ResourceLocation("minecraft", "textures/item/amethyst_shard.png"),
-                1100, 300,
-                "Psychic Shield",
-                PopupContent.page(
-                        PopupContent.text(
-                                "Creates a brief psychic barrier that\nnegates the next hit within 1 second.\n\n" +
-                                        "Cost: 25 mana\nCooldown: 6s"
-                        ),
-                        PopupContent.itemRender("minecraft:amethyst_cluster", "Amethyst Cluster"),
-                        PopupContent.itemRender("minecraft:amethyst_shard",    "Amethyst Shard — collect 3")
-                ),
-                new String[]{ "telekinesis" },
-                true, // confirm checkbox
-                TaskRequirement.kill("minecraft:amethyst_cluster", 20, "Amethyst clusters"),
-                TaskRequirement.item("minecraft:amethyst_shard",    3,  "Amethyst shards")
-        ));
+
+
 
         TABS.add(psychic);
 

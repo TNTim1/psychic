@@ -2,10 +2,11 @@ plugins {
     id 'eclipse'
     id 'idea'
     id 'maven-publish'
-    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+    id 'net.minecraftforge.gradle' version '6.0.29' // Use a specific, latest version
     id 'org.parchmentmc.librarian.forgegradle' version '1.+'
-    id 'org.jetbrains.kotlin.jvm'
+    id 'org.jetbrains.kotlin.jvm' version '1.9.22'
 }
+
 
 version = mod_version
 group = mod_group_id
@@ -211,4 +212,10 @@ tasks.withType(JavaCompile).configureEach {
 }
 kotlin {
     jvmToolchain(17)
+}
+configurations.configureEach {
+    if (name == "runtimeClasspathCopy") {
+        canBeResolved = true
+        canBeConsumed = false
+    }
 }

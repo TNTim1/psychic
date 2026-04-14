@@ -20,10 +20,29 @@ import java.util.Map;
  * </pre>
  */
 public class TaskProgress {
+    private final Map<String, Integer> counts = new HashMap<>(); // MUST be non-static
 
-    /** widgetId:reqIndex → current count */
-    private final Map<String, Integer> counts = new HashMap<>();
+    public CompoundTag save() {
+        CompoundTag nbt = new CompoundTag();
+        counts.forEach(nbt::putInt);
+        return nbt;
+    }
 
+    public void load(CompoundTag nbt) {
+        counts.clear();
+        for (String key : nbt.getAllKeys()) {
+            counts.put(key, nbt.getInt(key));
+        }
+    }
+
+    public Map<String, Integer> snapshot() {
+        return new HashMap<>(counts);
+    }
+
+    public void applySnapshot(Map<String, Integer> map) {
+        this.counts.clear();
+        this.counts.putAll(map);
+    }
     // ── key helper ────────────────────────────────────────────────────────────
 
     private static String key(String widgetId, int reqIndex) {
@@ -64,29 +83,5 @@ public class TaskProgress {
 
     // ── NBT ──────────────────────────────────────────────────────────────────
 
-    public CompoundTag save() {
-        CompoundTag tag = new CompoundTag();
-        for (Map.Entry<String, Integer> e : counts.entrySet()) {
-            tag.putInt(e.getKey(), e.getValue());
-        }
-        return tag;
-    }
 
-    public void load(CompoundTag tag) {
-        counts.clear();
-        for (String k : tag.getAllKeys()) {
-            counts.put(k, tag.getInt(k));
-        }
-    }
-
-    /** Returns a flat copy of the progress map for network sync. */
-    public Map<String, Integer> snapshot() {
-        return new HashMap<>(counts);
-    }
-
-    /** Replaces internal state from a synced snapshot (client side). */
-    public void applySnapshot(Map<String, Integer> snapshot) {
-        counts.clear();
-        counts.putAll(snapshot);
-    }
 }

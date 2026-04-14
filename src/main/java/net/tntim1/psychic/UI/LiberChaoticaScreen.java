@@ -15,10 +15,11 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.tntim1.psychic.network.ActivateWidgetPacket;
+import net.tntim1.psychic.network.DeactivateWidgetPacket;   // ← you must add this packet
 import net.tntim1.psychic.network.ModPackets;
 import net.tntim1.psychic.player_data.ClientKnowledge;
 import net.tntim1.psychic.widget.*;
-import net.tntim1.psychic.widget.pml.PmlRenderer;   // ← NEW IMPORT
+import net.tntim1.psychic.widget.pml.PmlRenderer;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.lwjgl.glfw.GLFW;
@@ -56,6 +57,10 @@ public class LiberChaoticaScreen extends Screen {
     private static final int C_BAR_DONE   = 0xFF44aa44;
     private static final int C_BAR_BORDER = 0xFF5a3a28;
 
+    // ── Spell widget active tint (drawn over the pattern when the spell is active) ──
+    private static final int C_SPELL_ACTIVE   = 0xFF392420;
+    private static final int C_SPELL_INACTIVE = 0xFFCCCCCC;  // neutral grey
+
     // ── Spiral palettes ───────────────────────────────────────────────────────
     private static final int[][][] TAB_SPIRAL_STOPS = {
             { { 0xAAAA66, 0x4B0082,   0, 200 }, { 0x4B0082, 0x0066CC, 200, 400 },
@@ -72,7 +77,7 @@ public class LiberChaoticaScreen extends Screen {
     };
 
     private static final float ARM_COUNT   = 8.0f;
-    private static final float GROWTH_RATE = 400.0f;
+    private static final float GROWTH_RATE = 200.0f;
 
     // ── layout ────────────────────────────────────────────────────────────────
     private static final int TAB_H     = 26;
@@ -82,13 +87,19 @@ public class LiberChaoticaScreen extends Screen {
     private static final int POPUP_W          = 220;
     private static final int POPUP_TASK_ROW_H = 22;
 
-    // Render thumbnail size (item/entity inside popup task area)
     private static final int RENDER_SZ = 32;
 
     // ── zoom ──────────────────────────────────────────────────────────────────
     private static final float ZOOM_MIN  = 0.001f;
     private static final float ZOOM_MAX  = 20.0f;
     private static final float ZOOM_STEP = 0.12f;
+
+    // ── Spell orbit layout ────────────────────────────────────────────────────
+    // Increased from 80→160 (radius step) and 0.5→0.9 (angle step) so spells
+    // are spaced further apart and further from the centre.
+    private static final float SPELL_ORBIT_RADIUS_START = 20f;
+    private static final float SPELL_ORBIT_RADIUS_STEP  = 10f;
+    private static final float SPELL_ANGLE_STEP         = 0.9f;
 
     // ── state ─────────────────────────────────────────────────────────────────
     private final List<TabDefinition> tabs = TabRegistry.getTabs();
@@ -165,7 +176,7 @@ public class LiberChaoticaScreen extends Screen {
             String title = tabs.get(activeTab).name.toUpperCase();
             gfx.drawString(font, title, frameX + 12, frameY + 12, C_ACCENT, false);
             int lineY = frameY + HEADER_H + 2;
-            gfx.fill(frameX +5, lineY, frameX + frameW-5, lineY + 1, C_TEXT);
+            gfx.fill(frameX + 5, lineY, frameX + frameW - 5, lineY + 1, C_TEXT);
         }
         renderTabBar(gfx, mx, my);
         renderCanvas(gfx, mx, my, pt);
@@ -217,6 +228,47 @@ public class LiberChaoticaScreen extends Screen {
             renderDependencyLines(gfx, tab, centres, pt);
             gfx.flush();
 
+            if (tab.name.equals("Psychic")) {
+                List<String> history = ClientKnowledge.getSpellOrder();
+
+                // We iterate by *slot index* so that a missing widget does not
+                // collapse the spiral — the next valid widget occupies the slot
+                // where the missing one would have been.
+                int slotIndex = 0;
+                for (String spellId : history) {
+                    // Always compute position from slotIndex before deciding to draw.
+                    double angle         = slotIndex * SPELL_ANGLE_STEP;
+                    float  radius        = SPELL_ORBIT_RADIUS_START + (slotIndex * SPELL_ORBIT_RADIUS_STEP);
+                    float  canvasXPos    = (float)(Math.cos(angle) * radius);
+                    float  canvasYPos    = (float)(Math.sin(angle) * radius);
+                    slotIndex++;   // advance slot regardless of whether the widget exists
+
+                    SpellWidgetDefinition s = TabRegistry.findSpellById(spellId);
+                    if (s == null) continue;   // no widget registered — position was still consumed above
+
+                    float cx = canvasX + (canvasW / 2f) + (canvasXPos - scrollX) * zoom;
+                    float cy = canvasY + (canvasH / 2f) + (canvasYPos - scrollY) * zoom;
+
+                    int drawSize = Math.round(s.size * zoom/2);
+                    int xPos = Math.round(cx - drawSize / 2f);
+                    int yPos = Math.round(cy - drawSize / 2f);
+
+                    boolean isActive = ClientKnowledge.isUnlocked(spellId);
+
+                    // Tinted backing square so the activation state is obvious even
+                    // before entering the pattern rendering.
+                    int backingAlpha = isActive ? 0x55 : 0x22;
+                    int backingColor = isActive
+                            ? (backingAlpha << 24 | 0x44FF88)   // green tint
+                            : (backingAlpha << 24 | 0x888888);  // grey tint
+                    gfx.fill(xPos - 2, yPos - 2, xPos + drawSize + 2, yPos + drawSize + 2, backingColor);
+
+                    // Render the spell pattern, coloured by active state
+                    int patternColor = isActive ? C_SPELL_ACTIVE : C_SPELL_INACTIVE;
+                    SpellPatternRenderer.render(gfx, xPos, yPos, drawSize, s.pattern, s.label, font, patternColor);
+                }
+            }
+
             hoveredWidget = -1;
             for (int i = 0; i < tab.widgets.size(); i++) {
                 WidgetDefinition w = tab.widgets.get(i);
@@ -244,7 +296,7 @@ public class LiberChaoticaScreen extends Screen {
         disableScissor();
     }
 
-    // ── Spiral background ─────────────────────────────────────────────────────
+    // ── Spiral background (unchanged) ─────────────────────────────────────────
 
     private void drawSpiralBackground(GuiGraphics gfx, float partialTick) {
         int texW = canvasW, texH = canvasH;
@@ -429,8 +481,8 @@ public class LiberChaoticaScreen extends Screen {
             float t = (float) i / segments;
             float invT = 1f - t;
 
-            float nextCleanX = invT * invT * invT * x1 + 3 * invT * invT * t * cp1x + 3 * invT * t * t * cp2x + t * t * t * x2;
-            float nextCleanY = invT * invT * invT * y1 + 3 * invT * invT * t * cp1y + 3 * invT * t * t * cp2y + t * t * t * y2;
+            float nextCleanX = invT*invT*invT*x1 + 3*invT*invT*t*cp1x + 3*invT*t*t*cp2x + t*t*t*x2;
+            float nextCleanY = invT*invT*invT*y1 + 3*invT*invT*t*cp1y + 3*invT*t*t*cp2y + t*t*t*y2;
 
             float dx = nextCleanX - lastCleanX;
             float dy = nextCleanY - lastCleanY;
@@ -449,15 +501,15 @@ public class LiberChaoticaScreen extends Screen {
             float nextJitterY = nextCleanY + (ny * disp);
 
             float alpha = Mth.lerp(t, a1, a2);
-            if (maxProgress < 0.99f && i >= drawCount - 2) alpha *= (1f - (float) (i - (drawCount - 2)) / 3f);
+            if (maxProgress < 0.99f && i >= drawCount - 2) alpha *= (1f - (float)(i - (drawCount - 2)) / 3f);
 
             float cr = Mth.lerp(t, r1, r2), cg = Mth.lerp(t, g1, g2), cb = Mth.lerp(t, b1, b2);
             float halfWidth = baseThickness / 2f;
 
-            consumer.vertex(matrix, lastJitterX - nx * halfWidth, lastJitterY - ny * halfWidth, z).color(cr, cg, cb, alpha).endVertex();
-            consumer.vertex(matrix, lastJitterX + nx * halfWidth, lastJitterY + ny * halfWidth, z).color(cr, cg, cb, alpha).endVertex();
-            consumer.vertex(matrix, nextJitterX + nx * halfWidth, nextJitterY + ny * halfWidth, z).color(cr, cg, cb, alpha).endVertex();
-            consumer.vertex(matrix, nextJitterX - nx * halfWidth, nextJitterY - ny * halfWidth, z).color(cr, cg, cb, alpha).endVertex();
+            consumer.vertex(matrix, lastJitterX - nx*halfWidth, lastJitterY - ny*halfWidth, z).color(cr, cg, cb, alpha).endVertex();
+            consumer.vertex(matrix, lastJitterX + nx*halfWidth, lastJitterY + ny*halfWidth, z).color(cr, cg, cb, alpha).endVertex();
+            consumer.vertex(matrix, nextJitterX + nx*halfWidth, nextJitterY + ny*halfWidth, z).color(cr, cg, cb, alpha).endVertex();
+            consumer.vertex(matrix, nextJitterX - nx*halfWidth, nextJitterY - ny*halfWidth, z).color(cr, cg, cb, alpha).endVertex();
 
             lastCleanX = nextCleanX; lastCleanY = nextCleanY;
             lastJitterX = nextJitterX; lastJitterY = nextJitterY;
@@ -526,7 +578,6 @@ public class LiberChaoticaScreen extends Screen {
             gfx.fill(px, navY, px+popW, navY+14, 0x33000000);
             String pageLabel = (popup.page+1) + " / " + pageCount;
             int plw = font.width(pageLabel);
-
             boolean prevHov = popup.page > 0 && mx >= px+4 && mx < px+14 && my >= navY+2 && my < navY+12;
             gfx.drawString(font, "<", px+6, navY+3, (popup.page > 0) ? (prevHov ? 0xFFFFAA44 : C_ACCENT) : 0xFF888888, false);
             gfx.drawString(font, pageLabel, px+(popW-plw)/2, navY+3, C_ACCENT, false);
@@ -542,10 +593,15 @@ public class LiberChaoticaScreen extends Screen {
         int taskZoneH       = hasTasks ? (w.taskRequirements.size() * POPUP_TASK_ROW_H + 4) : 0;
         boolean needsConfirm   = hasTasks && w.requiresConfirmation && ClientKnowledge.areTasksMet(w.id);
         int confirmRowH        = needsConfirm ? 20 : 0;
-        int bottomButtonH      = isLastPage ? 22 : 0;
-        int bodyH              = popH - headerTotalH - 4 - taskZoneH - confirmRowH - bottomButtonH - 4;
-        int bodyW              = popW - 12;
-        int bx                 = px + 6;
+
+        // Reserve space for two buttons when the spell is active (Activate replaced by Deactivate)
+        // A spell popup has an extra Deactivate row when isUnlocked is true.
+        boolean isSpellPopup   = (w instanceof SpellWidgetDefinition);
+        int bottomButtonH      = isLastPage ? (isUnlocked && isSpellPopup ? 44 : 22) : 0;
+
+        int bodyH = popH - headerTotalH - 4 - taskZoneH - confirmRowH - bottomButtonH - 4;
+        int bodyW = popW - 12;
+        int bx    = px + 6;
 
         if (!depsOk) {
             int cy = contentY;
@@ -559,69 +615,40 @@ public class LiberChaoticaScreen extends Screen {
                 cy += lh;
             }
         } else {
-            // ── Render current page blocks ─────────────────────────────────────
             PopupContent.Page currentPage = content.pages.get(popup.page);
             popup.hoveredRenderIdx = -1;
-
             int cy = contentY;
             int lh = font.lineHeight + 2;
 
             for (int bi = 0; bi < currentPage.blocks.size(); bi++) {
                 PopupContent.Block block = currentPage.blocks.get(bi);
-
-                // ── UPDATED SWITCH — includes PML_SOURCE ──────────────────────
                 switch (block.type) {
-
                     case TEXT -> {
                         cy = renderBlockText(gfx, block.data, bx, cy, bodyW, contentY + bodyH, lh);
                     }
-
                     case LIST -> {
                         cy = renderBlockList(gfx, block.data, bx, cy, bodyW, contentY + bodyH, lh);
                     }
-
                     case IMAGE -> {
                         cy = renderBlockImage(gfx, block.data, bx, cy, bodyW, contentY + bodyH);
                     }
-
                     case ENTITY_RENDER -> {
                         int sz = RENDER_SZ;
                         if (cy + sz + 2 > contentY + bodyH) break;
-
-                        boolean renderHov = mx >= bx && mx < bx + sz && my >= cy && my < cy + sz;
+                        boolean renderHov = mx >= bx && mx < bx+sz && my >= cy && my < cy+sz;
                         if (renderHov) popup.hoveredRenderIdx = bi;
-
                         gfx.fill(bx-2, cy-2, bx+sz+2, cy+sz+2, 0x33000000);
                         drawBorder(gfx, bx-2, cy-2, sz+4, sz+4, 1, C_POPUP_BORDER);
-
-                        if (block.isEntity) {
-                            renderEntityThumbnail(gfx, block.resourceId, bx, cy, sz, pt);
-                        } else {
-                            renderItemThumbnail(gfx, block.resourceId, bx, cy, sz);
-                        }
-
+                        if (block.isEntity) renderEntityThumbnail(gfx, block.resourceId, bx, cy, sz, pt);
+                        else                renderItemThumbnail(gfx, block.resourceId, bx, cy, sz);
                         if (renderHov && block.data != null && !block.data.isEmpty())
                             drawTooltip(gfx, block.data, mx, my);
-
                         cy += sz + 4;
                     }
-
-                    // ── NEW: PML_SOURCE block ─────────────────────────────────
                     case PML_SOURCE -> {
-                        cy = PmlRenderer.render(
-                                gfx,
-                                font,
-                                block.pmlNodes(),   // lazily parsed + cached
-                                bx,
-                                cy,
-                                bodyW,
-                                contentY + bodyH,
-                                pt
-                        );
+                        cy = PmlRenderer.render(gfx, font, block.pmlNodes(), bx, cy, bodyW, contentY + bodyH, pt);
                     }
                 }
-                // ── END SWITCH ────────────────────────────────────────────────
-
                 if (cy >= contentY + bodyH) break;
             }
         }
@@ -655,30 +682,39 @@ public class LiberChaoticaScreen extends Screen {
         if (isLastPage && needsConfirm) {
             int checkY = py + popH - bottomButtonH - 4 - confirmRowH;
             gfx.fill(px+6, checkY-1, px+popW-6, checkY, C_ACCENT);
-
             boolean checkHov = mx >= bx && mx < bx+16 && my >= checkY+2 && my < checkY+18;
             ResourceLocation checkTex = popup.confirmed
                     ? WidgetDefinition.CHECKBOX_CHECKED
                     : (checkHov ? WidgetDefinition.CHECKBOX_HOVERED : WidgetDefinition.CHECKBOX_UNCHECKED);
-
             RenderSystem.enableBlend();
             gfx.blit(checkTex, bx, checkY+2, 0, 0, 14, 14, 14, 14);
             RenderSystem.disableBlend();
             gfx.drawString(font, "Confirm activation", bx+18, checkY+5, C_ACCENT, false);
         }
 
-        // ── Bottom action button ──────────────────────────────────────────────
+        // ── Bottom action buttons ─────────────────────────────────────────────
         if (isLastPage) {
             int btnW = 90, btnH = 16;
             int btnX = px + (popW - btnW) / 2;
-            int btnY = py + popH - 20;
 
             if (isUnlocked) {
-                renderBottomButton(gfx, "UNLOCKED", 0xFF44aa44, false, btnX, btnY, btnW, btnH, mx, my);
+                // Primary row: "ACTIVE" indicator (non-interactive)
+                int activeRowY = py + popH - (isSpellPopup ? 44 : 20);
+                renderBottomButton(gfx, "ACTIVE ✔", 0xFF44aa44, false, btnX, activeRowY, btnW, btnH, mx, my);
+
+                // Deactivate button — only for spell widgets
+                if (isSpellPopup) {
+                    int deactY = py + popH - 20;
+                    boolean deactHov = mx >= btnX && mx < btnX+btnW && my >= deactY && my < deactY+btnH;
+                    renderBottomButton(gfx, "DEACTIVATE", deactHov ? 0xFFAA3333 : 0xFF772222, true, btnX, deactY, btnW, btnH, mx, my);
+                }
+
             } else if (!depsOk) {
+                int btnY = py + popH - 20;
                 renderBottomButton(gfx, "LOCKED", 0xFF555555, false, btnX, btnY, btnW, btnH, mx, my);
             } else if (w.hasTasks()) {
                 boolean allDone = ClientKnowledge.areTasksMet(w.id);
+                int btnY = py + popH - 20;
                 if (allDone && (!w.requiresConfirmation || popup.confirmed)) {
                     boolean hov = mx >= btnX && mx < btnX+btnW && my >= btnY && my < btnY+btnH;
                     renderBottomButton(gfx, "ACTIVATE ✔", hov ? 0xFFc4a080 : C_BORDER, true, btnX, btnY, btnW, btnH, mx, my);
@@ -688,13 +724,14 @@ public class LiberChaoticaScreen extends Screen {
                     renderBottomButton(gfx, "IN PROGRESS", 0xFF7a5a3a, false, btnX, btnY, btnW, btnH, mx, my);
                 }
             } else {
+                int btnY = py + popH - 20;
                 boolean hov = mx >= btnX && mx < btnX+btnW && my >= btnY && my < btnY+btnH;
                 renderBottomButton(gfx, "ACTIVATE", hov ? 0xFFc4a080 : C_BORDER, true, btnX, btnY, btnW, btnH, mx, my);
             }
         }
     }
 
-    // ── Block renderers (legacy — still used for TEXT / LIST / IMAGE / ENTITY_RENDER) ──
+    // ── Block renderers ───────────────────────────────────────────────────────
 
     private int renderBlockText(GuiGraphics gfx, String text, int x, int y, int maxW, int maxY, int lh) {
         int cy = y;
@@ -732,33 +769,23 @@ public class LiberChaoticaScreen extends Screen {
         }
     }
 
-    private void renderEntityThumbnail(GuiGraphics gfx, String entityId,
-                                       int x, int y, int sz, float partialTick) {
+    private void renderEntityThumbnail(GuiGraphics gfx, String entityId, int x, int y, int sz, float partialTick) {
         try {
             ResourceLocation rl = new ResourceLocation(entityId);
-            Optional<EntityType<?>> typeOpt = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE
-                    .getOptional(rl);
+            Optional<EntityType<?>> typeOpt = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getOptional(rl);
             if (typeOpt.isEmpty()) { renderMissingPlaceholder(gfx, x, y, sz); return; }
-
             net.minecraft.world.entity.Entity entity = typeOpt.get().create(minecraft.level);
-            if (!(entity instanceof LivingEntity living)) {
-                renderMissingPlaceholder(gfx, x, y, sz); return;
-            }
-
-            float yRot = (minecraft.level.getGameTime() + partialTick) * 2.0f;
+            if (!(entity instanceof LivingEntity living)) { renderMissingPlaceholder(gfx, x, y, sz); return; }
+            float yRot  = (minecraft.level.getGameTime() + partialTick) * 2.0f;
             float scale = sz * 0.35f;
-
             com.mojang.blaze3d.vertex.PoseStack poseStack = gfx.pose();
             poseStack.pushPose();
-            poseStack.translate(x + sz / 2.0, y + sz * 0.85, 50.0);
+            poseStack.translate(x + sz/2.0, y + sz*0.85, 50.0);
             poseStack.scale(scale, -scale, scale);
             poseStack.mulPose(com.mojang.math.Axis.YP.rotationDegrees(yRot));
-
             EntityRenderDispatcher dispatcher = minecraft.getEntityRenderDispatcher();
             dispatcher.setRenderShadow(false);
-            net.minecraft.client.renderer.MultiBufferSource.BufferSource buffers =
-                    minecraft.renderBuffers().bufferSource();
-
+            net.minecraft.client.renderer.MultiBufferSource.BufferSource buffers = minecraft.renderBuffers().bufferSource();
             RenderSystem.enableDepthTest();
             dispatcher.render(living, 0.0, 0.0, 0.0, yRot, partialTick, poseStack, buffers,
                     net.minecraft.client.renderer.LightTexture.pack(15, 15));
@@ -766,9 +793,7 @@ public class LiberChaoticaScreen extends Screen {
             dispatcher.setRenderShadow(true);
             RenderSystem.disableDepthTest();
             poseStack.popPose();
-        } catch (Exception e) {
-            renderMissingPlaceholder(gfx, x, y, sz);
-        }
+        } catch (Exception e) { renderMissingPlaceholder(gfx, x, y, sz); }
     }
 
     private void renderItemThumbnail(GuiGraphics gfx, String itemId, int x, int y, int sz) {
@@ -777,16 +802,13 @@ public class LiberChaoticaScreen extends Screen {
             Item             itm = net.minecraft.core.registries.BuiltInRegistries.ITEM.get(rl);
             ItemStack        stk = new ItemStack(itm);
             if (stk.isEmpty()) { renderMissingPlaceholder(gfx, x, y, sz); return; }
-
             float scale = sz / 16.0f;
             gfx.pose().pushPose();
             gfx.pose().translate(x, y, 0);
             gfx.pose().scale(scale, scale, 1.0f);
             gfx.renderItem(stk, 0, 0);
             gfx.pose().popPose();
-        } catch (Exception e) {
-            renderMissingPlaceholder(gfx, x, y, sz);
-        }
+        } catch (Exception e) { renderMissingPlaceholder(gfx, x, y, sz); }
     }
 
     private void renderMissingPlaceholder(GuiGraphics gfx, int x, int y, int sz) {
@@ -794,7 +816,7 @@ public class LiberChaoticaScreen extends Screen {
         gfx.drawString(font, "?", x+sz/2-3, y+sz/2-4, 0xFFCCCCCC, false);
     }
 
-    // ── Bottom button ─────────────────────────────────────────────────────────
+    // ── Bottom button helper ──────────────────────────────────────────────────
 
     private void renderBottomButton(GuiGraphics gfx, String text, int bgColor,
                                     boolean interactive, int x, int y, int w, int h, int mx, int my) {
@@ -806,18 +828,21 @@ public class LiberChaoticaScreen extends Screen {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // INPUT (unchanged from original)
+    // INPUT
     // ─────────────────────────────────────────────────────────────────────────
 
     @Override
     public boolean mouseClicked(double mx, double my, int btn) {
         if (popup != null) {
-            WidgetDefinition w         = popup.widget;
+            WidgetDefinition w          = popup.widget;
             boolean          depsOk    = ClientKnowledge.areDependenciesMet(w.id);
             boolean          isUnlocked = ClientKnowledge.isUnlocked(w.id);
+            boolean          isSpellPopup = (w instanceof SpellWidgetDefinition);
+
             int popW = POPUP_W, popH = canvasH;
             int ppx = canvasX + canvasW - popW, ppy = canvasY;
 
+            // Close button
             if (mx >= ppx+popW-14 && mx < ppx+popW && my >= ppy && my < ppy+20) {
                 popup = null; return true;
             }
@@ -825,45 +850,64 @@ public class LiberChaoticaScreen extends Screen {
             boolean inside = mx >= ppx && mx < ppx+popW && my >= ppy && my < ppy+popH;
             if (!inside) { popup = null; return true; }
 
-            int pageCount  = w.popupContent.pageCount();
+            int pageCount    = w.popupContent.pageCount();
             int headerTotalH = 21 + (pageCount > 1 ? 14 : 0);
+
+            // Page navigation
             if (pageCount > 1) {
                 int navY = ppy + 21;
                 if (my >= navY && my < navY+14) {
-                    if (mx >= ppx+4 && mx < ppx+14 && popup.page > 0) { popup.page--; return true; }
+                    if (mx >= ppx+4 && mx < ppx+14 && popup.page > 0)            { popup.page--; return true; }
                     if (mx >= ppx+popW-14 && mx < ppx+popW-4 && popup.page < pageCount-1) { popup.page++; return true; }
                 }
             }
 
+            // Confirmation checkbox
             boolean needsConfirm = depsOk && w.hasTasks() && !isUnlocked
                     && w.requiresConfirmation && ClientKnowledge.areTasksMet(w.id);
             if (needsConfirm) {
                 int confirmRowH = 20;
-                int btnH2 = 22;
-                int checkY = ppy + popH - btnH2 - 4 - confirmRowH;
-                int cbx = ppx + 6;
+                int btnH2       = isUnlocked && isSpellPopup ? 44 : 22;
+                int checkY      = ppy + popH - btnH2 - 4 - confirmRowH;
+                int cbx         = ppx + 6;
                 if (mx >= cbx && mx < cbx+16 && my >= checkY+2 && my < checkY+18) {
                     popup.confirmed = !popup.confirmed; return true;
                 }
             }
 
-            boolean isLastPageClick = (popup.page == w.popupContent.pageCount() - 1);
+            boolean isLastPageClick = (popup.page == pageCount - 1);
+
             if (isLastPageClick) {
                 int btnW = 90, btnH = 16;
-                int btnX = ppx + (popW-btnW)/2;
-                int btnY = ppy + popH - 20;
-                if (mx >= btnX && mx < btnX+btnW && my >= btnY && my < btnY+btnH) {
-                    boolean canActivate = !isUnlocked && depsOk
-                            && (!w.hasTasks() || (ClientKnowledge.areTasksMet(w.id)
-                            && (!w.requiresConfirmation || popup.confirmed)));
-                    if (canActivate) ModPackets.sendToServer(new ActivateWidgetPacket(w.id));
-                    return true;
+                int btnX = ppx + (popW - btnW) / 2;
+
+                // ── Deactivate button (spell only, when unlocked) ──────────────
+                if (isUnlocked && isSpellPopup) {
+                    int deactY = ppy + popH - 20;
+                    if (mx >= btnX && mx < btnX+btnW && my >= deactY && my < deactY+btnH) {
+                        ModPackets.sendToServer(new DeactivateWidgetPacket(w.id));
+                        popup = null;
+                        return true;
+                    }
+                }
+
+                // ── Activate button (non-unlocked path) ───────────────────────
+                if (!isUnlocked) {
+                    int btnY = ppy + popH - 20;
+                    if (mx >= btnX && mx < btnX+btnW && my >= btnY && my < btnY+btnH) {
+                        boolean canActivate = depsOk
+                                && (!w.hasTasks() || (ClientKnowledge.areTasksMet(w.id)
+                                && (!w.requiresConfirmation || popup.confirmed)));
+                        if (canActivate) ModPackets.sendToServer(new ActivateWidgetPacket(w.id));
+                        return true;
+                    }
                 }
             }
 
             return true;
         }
 
+        // ── Tab bar ───────────────────────────────────────────────────────────
         int tabW = 24, tabH = 24, spacing = 2;
         for (int i = 0; i < tabs.size(); i++) {
             int tx = frameX+frameW, ty = frameY+(i*(tabH+spacing));
@@ -880,7 +924,37 @@ public class LiberChaoticaScreen extends Screen {
 
         if (btn == GLFW.GLFW_MOUSE_BUTTON_LEFT && isInCanvas((int)mx, (int)my)) {
             if (!tabs.isEmpty()) {
-                for (WidgetDefinition w : tabs.get(activeTab).widgets) {
+                TabDefinition tab = tabs.get(activeTab);
+
+                // ── Spell widgets ─────────────────────────────────────────────
+                if (tab.name.equals("Psychic")) {
+                    List<String> history = ClientKnowledge.getSpellOrder();
+                    int slotIndex = 0;
+                    for (String spellId : history) {
+                        double angle      = slotIndex * SPELL_ANGLE_STEP;
+                        float  radius     = SPELL_ORBIT_RADIUS_START + (slotIndex * SPELL_ORBIT_RADIUS_STEP);
+                        float  canvasXPos = (float)(Math.cos(angle) * radius);
+                        float  canvasYPos = (float)(Math.sin(angle) * radius);
+                        slotIndex++;   // always advance, matching renderCanvas exactly
+
+                        SpellWidgetDefinition s = TabRegistry.findSpellById(spellId);
+                        if (s == null) continue;
+
+                        float cx = canvasX + (canvasW / 2f) + (canvasXPos - scrollX) * zoom;
+                        float cy = canvasY + (canvasH / 2f) + (canvasYPos - scrollY) * zoom;
+                        int drawSize = Math.round(s.size * zoom)/2;
+                        float xPos   = cx - drawSize / 2f;
+                        float yPos   = cy - drawSize / 2f;
+
+                        if (mx >= xPos && mx < xPos+drawSize && my >= yPos && my < yPos+drawSize) {
+                            popup = new PopupState(s);
+                            return true;
+                        }
+                    }
+                }
+
+                // ── Normal widgets ────────────────────────────────────────────
+                for (WidgetDefinition w : tab.widgets) {
                     float centerX = canvasX + (canvasW/2f) + (w.canvasX-scrollX)*zoom;
                     float centerY = canvasY + (canvasH/2f) + (w.canvasY-scrollY)*zoom;
                     float iconW = w.iconW*zoom, iconH = w.iconH*zoom;
@@ -915,7 +989,7 @@ public class LiberChaoticaScreen extends Screen {
         if (!isInCanvas((int)mx, (int)my) || popup != null) return false;
         float oldZoom = zoom;
         zoom = Mth.clamp(zoom * (delta > 0 ? 1.1f : 0.9f), ZOOM_MIN, ZOOM_MAX);
-        float dx = (float)(mx - (canvasX+canvasW/2)), dy = (float)(my - (canvasY+canvasH/2));
+        float dx = (float)(mx - (canvasX+canvasW/2f)), dy = (float)(my - (canvasY+canvasH/2f));
         scrollX += dx/oldZoom - dx/zoom;
         scrollY += dy/oldZoom - dy/zoom;
         return true;
@@ -961,18 +1035,18 @@ public class LiberChaoticaScreen extends Screen {
     }
 
     private void drawBorder(GuiGraphics gfx, int x, int y, int w, int h, int t, int col) {
-        gfx.fill(x,       y,       x+w,   y+t,   col);
-        gfx.fill(x,       y+h-t,   x+w,   y+h,   col);
-        gfx.fill(x,       y,       x+t,   y+h,   col);
-        gfx.fill(x+w-t,   y,       x+w,   y+h,   col);
+        gfx.fill(x,     y,     x+w,   y+t,   col);
+        gfx.fill(x,     y+h-t, x+w,   y+h,   col);
+        gfx.fill(x,     y,     x+t,   y+h,   col);
+        gfx.fill(x+w-t, y,     x+w,   y+h,   col);
     }
 
     private void drawCornerAccents(GuiGraphics gfx, int x, int y, int w, int h) {
         int s = 6, col = C_ACCENT;
-        gfx.fill(x,       y,       x+s,   y+1,   col); gfx.fill(x,       y,       x+1,   y+s,   col);
-        gfx.fill(x+w-s,   y,       x+w,   y+1,   col); gfx.fill(x+w-1,   y,       x+w,   y+s,   col);
-        gfx.fill(x,       y+h-1,   x+s,   y+h,   col); gfx.fill(x,       y+h-s,   x+1,   y+h,   col);
-        gfx.fill(x+w-s,   y+h-1,   x+w,   y+h,   col); gfx.fill(x+w-1,   y+h-s,   x+w,   y+h,   col);
+        gfx.fill(x,     y,     x+s,   y+1,   col); gfx.fill(x,     y,     x+1,   y+s,   col);
+        gfx.fill(x+w-s, y,     x+w,   y+1,   col); gfx.fill(x+w-1, y,     x+w,   y+s,   col);
+        gfx.fill(x,     y+h-1, x+s,   y+h,   col); gfx.fill(x,     y+h-s, x+1,   y+h,   col);
+        gfx.fill(x+w-s, y+h-1, x+w,   y+h,   col); gfx.fill(x+w-1, y+h-s, x+w,   y+h,   col);
     }
 
     private void drawTooltip(GuiGraphics gfx, String text, int mx, int my) {
@@ -986,7 +1060,7 @@ public class LiberChaoticaScreen extends Screen {
 
     private void enableScissor(int x, int y, int w, int h) {
         double s = minecraft.getWindow().getGuiScale();
-        RenderSystem.enableScissor((int)(x*s),(int)((height-y-h)*s),(int)(w*s),(int)(h*s));
+        RenderSystem.enableScissor((int)(x*s), (int)((height-y-h)*s), (int)(w*s), (int)(h*s));
     }
 
     private void disableScissor() { RenderSystem.disableScissor(); }
