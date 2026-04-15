@@ -1,5 +1,6 @@
 package net.tntim1.psychic.UI;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.*;
 import net.minecraft.client.Minecraft;
@@ -17,6 +18,7 @@ import net.tntim1.psychic.UI.Rhythm.RhythmNote;
 import net.tntim1.psychic.network.CastSpellPacket;
 import net.tntim1.psychic.network.ModPackets;
 import net.tntim1.psychic.network.RequestWarpPacket;
+import net.tntim1.psychic.network.SpendManaPacket;
 import org.joml.Matrix4f;
 import org.lwjgl.glfw.GLFW;
 
@@ -97,6 +99,30 @@ public class CastingUi extends Screen {
     @Override public boolean isPauseScreen() { return false; }
 
     // --- Logic ---
+
+    private void requestRhythmStart(String spellId) {
+        this.currentSpellId = spellId;
+        ModPackets.sendToServer(new SpendManaPacket(spellId));
+        // UI stays in dialing state until server responds
+    }
+
+    // Called by ManaSpendResultPacket if success
+    public void confirmRhythmStart() {
+        this.uiState = 1;
+        this.rhythmStartTime = System.currentTimeMillis();
+        this.activeNotes.clear();
+        for (int i = 0; i < 10; i++) {
+            activeNotes.add(new RhythmNote((int)(Math.random() * 8), 2000 + (i * 800L)));
+        }
+    }
+
+    // Called by ManaSpendResultPacket if failure
+    public void cancelRhythmStart() {
+        this.currentSpellId = null;
+        clearSequence();
+        Minecraft.getInstance().player.displayClientMessage(
+                Component.literal("§cNot enough mana!"), true);
+    }
     private void startRhythmGame(String spellName) {
         this.currentSpellId = spellName;
         this.uiState = 1;
@@ -176,6 +202,7 @@ public class CastingUi extends Screen {
             );
         }
     }
+
     // --- Updated renderButtons Logic ---
     private void renderButtons(GuiGraphics guiGraphics) {
         int r = buttonScreenRadius();
@@ -452,7 +479,7 @@ public class CastingUi extends Screen {
             // 2. Check knowledge
             if (net.tntim1.psychic.player_data.ClientKnowledge.isUnlocked(foundSpellId)) {
                 this.completedLines.clear();
-                startRhythmGame(foundSpellId);
+                requestRhythmStart(foundSpellId);
                 Minecraft.getInstance().player.displayClientMessage(
                         Component.literal("§b✔ Casting " + foundSpellId + "..."), true);
 
@@ -513,8 +540,20 @@ public class CastingUi extends Screen {
 
     @Override
     public boolean keyPressed(int key, int sc, int mod) {
-        if (key == GLFW.GLFW_KEY_ESCAPE || key == GLFW.GLFW_KEY_C) { this.onClose(); return true; }
-        if (key == GLFW.GLFW_KEY_SPACE && uiState == 0) { processSpellCheck(); return true; }
+        if (key == GLFW.GLFW_KEY_ESCAPE) {
+            this.onClose();
+            return true;
+        }
+
+        if (KeyInit.castingKey.isActiveAndMatches(InputConstants.getKey(key, sc))) {
+            this.onClose();
+            return true;
+        }
+
+        if (KeyInit.confirmKey.isActiveAndMatches(InputConstants.getKey(key, sc)) && uiState == 0) {
+            processSpellCheck();
+            return true;
+        }
         if (key >= GLFW.GLFW_KEY_1 && key <= GLFW.GLFW_KEY_8) {
             int lane = key - GLFW.GLFW_KEY_1;
             isPressed[lane] = true;

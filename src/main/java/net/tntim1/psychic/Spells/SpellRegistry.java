@@ -19,7 +19,7 @@ public class SpellRegistry {
                 player -> {
                     // TODO: fire beam logic
                 },  new ResourceLocation("minecraft", "textures/item/blaze_powder.png")
-                ,3
+                ,3,5f
         ));
 
         register(new SpellDefinition(
@@ -31,7 +31,7 @@ public class SpellRegistry {
                 player -> {
                     // teleport logic
                 },  new ResourceLocation("psychic", "textures/gui/widgets/fills/chaos_star.png")
-                , -20
+                , -20, 10f
         ));
 
     }

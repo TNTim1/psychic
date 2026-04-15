@@ -22,13 +22,16 @@ public class SpellDefinition {
     public final SpellAction action;
 
     public  final  int  warpChange;
+    public final float manaCost;
 
     public SpellDefinition(String id,
                            String title,
                            String description,
                            int[][] connections,
                            List<Integer> displayPattern,
-                           SpellAction action, ResourceLocation texture, int warpChange) {
+                           SpellAction action, ResourceLocation texture,
+                           int warpChange,
+                           float manaCost) {
         this.id = id;
         this.title = title;
         this.description = description;
@@ -37,6 +40,7 @@ public class SpellDefinition {
         this.displayPattern = displayPattern;
         this.action = action;
         this.warpChange= warpChange;
+        this.manaCost=manaCost;
     }
 
     private Set<Set<Integer>> createPattern(int[][] connections) {

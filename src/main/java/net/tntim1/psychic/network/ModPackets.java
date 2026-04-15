@@ -132,6 +132,21 @@ public class ModPackets {
                 .encoder(CastSpellPacket::encode)
                 .consumerMainThread(CastSpellPacket::handle)
                 .add();
+        net.messageBuilder(ManaSyncPacket.class, id(), NetworkDirection.PLAY_TO_CLIENT)
+                .decoder(ManaSyncPacket::decode)
+                .encoder(ManaSyncPacket::encode)
+                .consumerMainThread(ManaSyncPacket::handle)
+                .add();
+        net.messageBuilder(ManaSpendResultPacket.class, id(), NetworkDirection.PLAY_TO_CLIENT)
+                .decoder(ManaSpendResultPacket::decode)
+                .encoder(ManaSpendResultPacket::encode)
+                .consumerMainThread(ManaSpendResultPacket::handle)
+                .add();
+        net.messageBuilder(SpendManaPacket.class, id(), NetworkDirection.PLAY_TO_SERVER)
+                .decoder(SpendManaPacket::decode)
+                .encoder(SpendManaPacket::encode)
+                .consumerMainThread(SpendManaPacket::handle)
+                .add();
     }
 
     public static <MSG> void sendToPlayer(MSG message, ServerPlayer player) {
