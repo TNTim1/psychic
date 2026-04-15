@@ -77,7 +77,7 @@ public class LiberChaoticaScreen extends Screen {
     };
 
     private static final float ARM_COUNT   = 8.0f;
-    private static final float GROWTH_RATE = 200.0f;
+    private static final float GROWTH_RATE = 100.0f;
 
     // ── layout ────────────────────────────────────────────────────────────────
     private static final int TAB_H     = 26;
@@ -97,8 +97,8 @@ public class LiberChaoticaScreen extends Screen {
     // ── Spell orbit layout ────────────────────────────────────────────────────
     // Increased from 80→160 (radius step) and 0.5→0.9 (angle step) so spells
     // are spaced further apart and further from the centre.
-    private static final float SPELL_ORBIT_RADIUS_START = 20f;
-    private static final float SPELL_ORBIT_RADIUS_STEP  = 10f;
+    private static final float SPELL_ORBIT_RADIUS_START = 60f;
+    private static final float SPELL_ORBIT_RADIUS_STEP  = 20f;
     private static final float SPELL_ANGLE_STEP         = 0.9f;
 
     // ── state ─────────────────────────────────────────────────────────────────
@@ -241,7 +241,7 @@ public class LiberChaoticaScreen extends Screen {
                     float  radius        = SPELL_ORBIT_RADIUS_START + (slotIndex * SPELL_ORBIT_RADIUS_STEP);
                     float  canvasXPos    = (float)(Math.cos(angle) * radius);
                     float  canvasYPos    = (float)(Math.sin(angle) * radius);
-                    slotIndex++;   // advance slot regardless of whether the widget exists
+
 
                     SpellWidgetDefinition s = TabRegistry.findSpellById(spellId);
                     if (s == null) continue;   // no widget registered — position was still consumed above
@@ -249,7 +249,7 @@ public class LiberChaoticaScreen extends Screen {
                     float cx = canvasX + (canvasW / 2f) + (canvasXPos - scrollX) * zoom;
                     float cy = canvasY + (canvasH / 2f) + (canvasYPos - scrollY) * zoom;
 
-                    int drawSize = Math.round(s.size * zoom/2);
+                    int drawSize = Math.round(s.size * zoom);
                     int xPos = Math.round(cx - drawSize / 2f);
                     int yPos = Math.round(cy - drawSize / 2f);
 
@@ -265,7 +265,9 @@ public class LiberChaoticaScreen extends Screen {
 
                     // Render the spell pattern, coloured by active state
                     int patternColor = isActive ? C_SPELL_ACTIVE : C_SPELL_INACTIVE;
-                    SpellPatternRenderer.render(gfx, xPos, yPos, drawSize, s.pattern, s.label, font, patternColor);
+                    SpellPatternRenderer.render(gfx, xPos, yPos, drawSize, s.pattern, s.label, s.iconTexture, font, patternColor);
+
+                    slotIndex++;
                 }
             }
 
@@ -546,9 +548,14 @@ public class LiberChaoticaScreen extends Screen {
     private void renderPopup(GuiGraphics gfx, int mx, int my, float pt) {
         if (popup == null) return;
         WidgetDefinition w      = popup.widget;
+        boolean isSpellPopup    = (w instanceof SpellWidgetDefinition);
+
+        // 1. Gatekeeping Logic
+        // Spells always bypass the "Locked" view so players can read descriptions.
         boolean isUnlocked      = ClientKnowledge.isUnlocked(w.id);
-        boolean depsOk          = ClientKnowledge.areDependenciesMet(w.id);
-        List<String> missing    = ClientKnowledge.getMissingDependencyLabels(w.id);
+        boolean depsOk          = isSpellPopup || ClientKnowledge.areDependenciesMet(w.id);
+        List<String> missing    = isSpellPopup ? List.of() : ClientKnowledge.getMissingDependencyLabels(w.id);
+
         PopupContent content    = w.popupContent;
         int pageCount           = content.pageCount();
 
@@ -557,6 +564,7 @@ public class LiberChaoticaScreen extends Screen {
         int px   = canvasX + canvasW - popW;
         int py   = canvasY;
 
+        // Background, Shadow, and Border
         gfx.fill(px+5, py+5, px+popW+5, py+popH+5, 0x22000000);
         gfx.fill(px, py, px+popW, py+popH, C_POPUP_BG);
         drawBorder(gfx, px, py, popW, popH, 2, C_POPUP_BORDER);
@@ -573,6 +581,7 @@ public class LiberChaoticaScreen extends Screen {
         boolean closeHov = mx >= px+popW-14 && mx < px+popW && my >= py && my < py+20;
         gfx.drawString(font, "×", px+popW-10, py+6, closeHov ? 0x000000 : C_TEXT, false);
 
+        // Page Navigation
         if (pageCount > 1) {
             int navY = py + 21;
             gfx.fill(px, navY, px+popW, navY+14, 0x33000000);
@@ -585,25 +594,28 @@ public class LiberChaoticaScreen extends Screen {
             gfx.drawString(font, ">", px+popW-12, navY+3, (popup.page < pageCount-1) ? (nextHov ? 0xFFFFAA44 : C_ACCENT) : 0xFF888888, false);
         }
 
+        // ── Content Sizing ───────────────────────────────────────────────────
         int headerTotalH = 21 + (pageCount > 1 ? 14 : 0);
         int contentY     = py + headerTotalH + 4;
+        boolean isLastPage = (popup.page == pageCount - 1);
 
-        boolean isLastPage  = (popup.page == pageCount - 1);
-        boolean hasTasks    = isLastPage && depsOk && w.hasTasks() && !isUnlocked;
+        // Spells ignore Task Zones and Bottom Buttons entirely
+        boolean hasTasks    = !isSpellPopup && isLastPage && depsOk && w.hasTasks() && !isUnlocked;
         int taskZoneH       = hasTasks ? (w.taskRequirements.size() * POPUP_TASK_ROW_H + 4) : 0;
-        boolean needsConfirm   = hasTasks && w.requiresConfirmation && ClientKnowledge.areTasksMet(w.id);
-        int confirmRowH        = needsConfirm ? 20 : 0;
 
-        // Reserve space for two buttons when the spell is active (Activate replaced by Deactivate)
-        // A spell popup has an extra Deactivate row when isUnlocked is true.
-        boolean isSpellPopup   = (w instanceof SpellWidgetDefinition);
-        int bottomButtonH      = isLastPage ? (isUnlocked && isSpellPopup ? 44 : 22) : 0;
+        boolean needsConfirm = !isSpellPopup && hasTasks && w.requiresConfirmation && ClientKnowledge.areTasksMet(w.id);
+        int confirmRowH      = needsConfirm ? 20 : 0;
+
+        // Bottom buttons only exist for non-spell research entries
+        int bottomButtonH    = (isLastPage && !isSpellPopup) ? 22 : 0;
 
         int bodyH = popH - headerTotalH - 4 - taskZoneH - confirmRowH - bottomButtonH - 4;
         int bodyW = popW - 12;
         int bx    = px + 6;
 
+        // ── Body Rendering ───────────────────────────────────────────────────
         if (!depsOk) {
+            // Only non-spell widgets will ever hit this "Locked" state
             int cy = contentY;
             int lh = font.lineHeight + 2;
             gfx.drawString(font, "§cRequires:", bx, cy, C_TEXT, false);
@@ -623,15 +635,10 @@ public class LiberChaoticaScreen extends Screen {
             for (int bi = 0; bi < currentPage.blocks.size(); bi++) {
                 PopupContent.Block block = currentPage.blocks.get(bi);
                 switch (block.type) {
-                    case TEXT -> {
-                        cy = renderBlockText(gfx, block.data, bx, cy, bodyW, contentY + bodyH, lh);
-                    }
-                    case LIST -> {
-                        cy = renderBlockList(gfx, block.data, bx, cy, bodyW, contentY + bodyH, lh);
-                    }
-                    case IMAGE -> {
-                        cy = renderBlockImage(gfx, block.data, bx, cy, bodyW, contentY + bodyH);
-                    }
+                    case TEXT -> cy = renderBlockText(gfx, block.data, bx, cy, bodyW, contentY + bodyH, lh);
+                    case LIST -> cy = renderBlockList(gfx, block.data, bx, cy, bodyW, contentY + bodyH, lh);
+                    case IMAGE -> cy = renderBlockImage(gfx, block.data, bx, cy, bodyW, contentY + bodyH);
+                    case PML_SOURCE -> cy = PmlRenderer.render(gfx, font, block.pmlNodes(), bx, cy, bodyW, contentY + bodyH, pt);
                     case ENTITY_RENDER -> {
                         int sz = RENDER_SZ;
                         if (cy + sz + 2 > contentY + bodyH) break;
@@ -645,15 +652,16 @@ public class LiberChaoticaScreen extends Screen {
                             drawTooltip(gfx, block.data, mx, my);
                         cy += sz + 4;
                     }
-                    case PML_SOURCE -> {
-                        cy = PmlRenderer.render(gfx, font, block.pmlNodes(), bx, cy, bodyW, contentY + bodyH, pt);
-                    }
                 }
                 if (cy >= contentY + bodyH) break;
             }
         }
 
-        // ── Task progress bars ────────────────────────────────────────────────
+        // ── Footer UI (Research Entries Only) ────────────────────────────────
+        // Spells exit here to avoid rendering progress bars or activation buttons
+        if (isSpellPopup) return;
+
+        // Task progress bars
         if (isLastPage && hasTasks) {
             int taskY = py + popH - bottomButtonH - confirmRowH - 4 - taskZoneH;
             gfx.fill(px+6, taskY-2, px+popW-6, taskY-1, C_ACCENT);
@@ -678,7 +686,7 @@ public class LiberChaoticaScreen extends Screen {
             }
         }
 
-        // ── Confirmation checkbox ─────────────────────────────────────────────
+        // Confirmation checkbox
         if (isLastPage && needsConfirm) {
             int checkY = py + popH - bottomButtonH - 4 - confirmRowH;
             gfx.fill(px+6, checkY-1, px+popW-6, checkY, C_ACCENT);
@@ -692,39 +700,25 @@ public class LiberChaoticaScreen extends Screen {
             gfx.drawString(font, "Confirm activation", bx+18, checkY+5, C_ACCENT, false);
         }
 
-        // ── Bottom action buttons ─────────────────────────────────────────────
+        // Bottom action buttons
         if (isLastPage) {
             int btnW = 90, btnH = 16;
             int btnX = px + (popW - btnW) / 2;
+            int btnY = py + popH - 20;
 
             if (isUnlocked) {
-                // Primary row: "ACTIVE" indicator (non-interactive)
-                int activeRowY = py + popH - (isSpellPopup ? 44 : 20);
-                renderBottomButton(gfx, "ACTIVE ✔", 0xFF44aa44, false, btnX, activeRowY, btnW, btnH, mx, my);
-
-                // Deactivate button — only for spell widgets
-                if (isSpellPopup) {
-                    int deactY = py + popH - 20;
-                    boolean deactHov = mx >= btnX && mx < btnX+btnW && my >= deactY && my < deactY+btnH;
-                    renderBottomButton(gfx, "DEACTIVATE", deactHov ? 0xFFAA3333 : 0xFF772222, true, btnX, deactY, btnW, btnH, mx, my);
-                }
-
+                renderBottomButton(gfx, "ACTIVE ✔", 0xFF44aa44, false, btnX, btnY, btnW, btnH, mx, my);
             } else if (!depsOk) {
-                int btnY = py + popH - 20;
                 renderBottomButton(gfx, "LOCKED", 0xFF555555, false, btnX, btnY, btnW, btnH, mx, my);
             } else if (w.hasTasks()) {
                 boolean allDone = ClientKnowledge.areTasksMet(w.id);
-                int btnY = py + popH - 20;
                 if (allDone && (!w.requiresConfirmation || popup.confirmed)) {
                     boolean hov = mx >= btnX && mx < btnX+btnW && my >= btnY && my < btnY+btnH;
                     renderBottomButton(gfx, "ACTIVATE ✔", hov ? 0xFFc4a080 : C_BORDER, true, btnX, btnY, btnW, btnH, mx, my);
-                } else if (allDone) {
-                    renderBottomButton(gfx, "CONFIRM FIRST", 0xFF7a5a3a, false, btnX, btnY, btnW, btnH, mx, my);
                 } else {
-                    renderBottomButton(gfx, "IN PROGRESS", 0xFF7a5a3a, false, btnX, btnY, btnW, btnH, mx, my);
+                    renderBottomButton(gfx, allDone ? "CONFIRM FIRST" : "IN PROGRESS", 0xFF7a5a3a, false, btnX, btnY, btnW, btnH, mx, my);
                 }
             } else {
-                int btnY = py + popH - 20;
                 boolean hov = mx >= btnX && mx < btnX+btnW && my >= btnY && my < btnY+btnH;
                 renderBottomButton(gfx, "ACTIVATE", hov ? 0xFFc4a080 : C_BORDER, true, btnX, btnY, btnW, btnH, mx, my);
             }
@@ -929,27 +923,35 @@ public class LiberChaoticaScreen extends Screen {
                 // ── Spell widgets ─────────────────────────────────────────────
                 if (tab.name.equals("Psychic")) {
                     List<String> history = ClientKnowledge.getSpellOrder();
-                    int slotIndex = 0;
+
+                    int slotIndex = 0; // Only increments when a valid widget is found
                     for (String spellId : history) {
+                        SpellWidgetDefinition s = TabRegistry.findSpellById(spellId);
+
+                        // Skip missing widgets: slotIndex does NOT increment.
+                        // This keeps the hitbox aligned with the visible compact spiral.
+                        if (s == null) continue;
+
                         double angle      = slotIndex * SPELL_ANGLE_STEP;
                         float  radius     = SPELL_ORBIT_RADIUS_START + (slotIndex * SPELL_ORBIT_RADIUS_STEP);
                         float  canvasXPos = (float)(Math.cos(angle) * radius);
                         float  canvasYPos = (float)(Math.sin(angle) * radius);
-                        slotIndex++;   // always advance, matching renderCanvas exactly
-
-                        SpellWidgetDefinition s = TabRegistry.findSpellById(spellId);
-                        if (s == null) continue;
 
                         float cx = canvasX + (canvasW / 2f) + (canvasXPos - scrollX) * zoom;
                         float cy = canvasY + (canvasH / 2f) + (canvasYPos - scrollY) * zoom;
-                        int drawSize = Math.round(s.size * zoom)/2;
+
+                        int drawSize = Math.round(s.size * zoom);
                         float xPos   = cx - drawSize / 2f;
                         float yPos   = cy - drawSize / 2f;
 
-                        if (mx >= xPos && mx < xPos+drawSize && my >= yPos && my < yPos+drawSize) {
+                        // Hitbox check
+                        if (mx >= xPos && mx < xPos + drawSize && my >= yPos && my < yPos + drawSize) {
                             popup = new PopupState(s);
                             return true;
                         }
+
+                        // Only advance to the next spiral position after a valid widget is processed
+                        slotIndex++;
                     }
                 }
 

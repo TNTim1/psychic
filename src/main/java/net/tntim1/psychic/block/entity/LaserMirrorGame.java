@@ -4,6 +4,9 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import org.joml.Matrix4f;
 
 import java.util.*;
@@ -24,12 +27,14 @@ public class LaserMirrorGame extends MiniGame {
     // Direction constants
     // =========================================================================
 
-    private static final int[] UP    = { 0, -1};
-    private static final int[] RIGHT = { 1,  0};
-    private static final int[] DOWN  = { 0,  1};
-    private static final int[] LEFT  = {-1,  0};
+    private static final int[] UP = {0, -1};
+    private static final int[] RIGHT = {1, 0};
+    private static final int[] DOWN = {0, 1};
+    private static final int[] LEFT = {-1, 0};
 
-    /** Clockwise rotation order used by Piece.rotate(). */
+    /**
+     * Clockwise rotation order used by Piece.rotate().
+     */
     private static final int[][] DIR_ORDER = {UP, RIGHT, DOWN, LEFT};
 
     // =========================================================================
@@ -38,7 +43,7 @@ public class LaserMirrorGame extends MiniGame {
 
     private static class Piece {
         final String type;
-        int[]   dir;
+        int[] dir;
         boolean isStatic;   // drawn in gold; cannot be rotated
         boolean isLocked;   // cannot be moved or rotated
         Set<Integer> hitColors;  // beam visited this cell this frame
@@ -47,8 +52,8 @@ public class LaserMirrorGame extends MiniGame {
         int color;
 
         Piece(String type, int[] dir, boolean isStatic, boolean isLocked, int color) {
-            this.type     = type;
-            this.dir      = dir;
+            this.type = type;
+            this.dir = dir;
             this.isStatic = isStatic;
             this.isLocked = isLocked;
             this.color = color;
@@ -57,7 +62,9 @@ public class LaserMirrorGame extends MiniGame {
             this.expectedColors = new HashSet<>();
         }
 
-        /** Rotate 90° clockwise. No-op for static or locked pieces. */
+        /**
+         * Rotate 90° clockwise. No-op for static or locked pieces.
+         */
         void rotate() {
             // Only "locked" pieces are truly frozen in place.
             // "Static" pieces can now be rotated by the player.
@@ -85,7 +92,10 @@ public class LaserMirrorGame extends MiniGame {
                 case "mirror": {
                     boolean vertical = Arrays.equals(dir, UP) || Arrays.equals(dir, DOWN);
                     int[] reflected = mirrorReflect(incoming, vertical);
-                    if (reflected != null) { activatedColors.add(color); out.add(reflected); }
+                    if (reflected != null) {
+                        activatedColors.add(color);
+                        out.add(reflected);
+                    }
                     break;
                 }
 
@@ -101,13 +111,17 @@ public class LaserMirrorGame extends MiniGame {
                         int[] mirrorSideA, mirrorSideB;
 
                         if (Arrays.equals(dir, RIGHT)) {
-                            mirrorSideA = UP;    mirrorSideB = LEFT;
+                            mirrorSideA = UP;
+                            mirrorSideB = LEFT;
                         } else if (Arrays.equals(dir, DOWN)) {
-                            mirrorSideA = RIGHT;  mirrorSideB = UP;
+                            mirrorSideA = RIGHT;
+                            mirrorSideB = UP;
                         } else if (Arrays.equals(dir, LEFT)) {
-                            mirrorSideA = DOWN;  mirrorSideB = RIGHT;
+                            mirrorSideA = DOWN;
+                            mirrorSideB = RIGHT;
                         } else { // UP
-                            mirrorSideA = LEFT; mirrorSideB = DOWN;
+                            mirrorSideA = LEFT;
+                            mirrorSideB = DOWN;
                         }
 
                         // 3. Perform the Reflective Swap
@@ -176,45 +190,64 @@ public class LaserMirrorGame extends MiniGame {
         private static int[] mirrorReflect(int[] in, boolean vertical) {
             if (vertical) {
                 if (Arrays.equals(in, RIGHT)) return UP;
-                if (Arrays.equals(in, UP))    return RIGHT;
-                if (Arrays.equals(in, LEFT))  return DOWN;
-                if (Arrays.equals(in, DOWN))  return LEFT;
+                if (Arrays.equals(in, UP)) return RIGHT;
+                if (Arrays.equals(in, LEFT)) return DOWN;
+                if (Arrays.equals(in, DOWN)) return LEFT;
             } else {
                 if (Arrays.equals(in, RIGHT)) return DOWN;
-                if (Arrays.equals(in, DOWN))  return RIGHT;
-                if (Arrays.equals(in, LEFT))  return UP;
-                if (Arrays.equals(in, UP))    return LEFT;
+                if (Arrays.equals(in, DOWN)) return RIGHT;
+                if (Arrays.equals(in, LEFT)) return UP;
+                if (Arrays.equals(in, UP)) return LEFT;
             }
             return null;
         }
+    }
+    public Map<Integer, Integer> getRequiredLaserCounts() {
+        Map<Integer, Integer> counts = new HashMap<>();
+
+        for (List<Integer> group : goalConnections) {
+            for (int id : group) {
+                counts.merge(id, 1, Integer::sum);
+            }
+        }
+
+        return counts;
     }
 
     // =========================================================================
     // Level definition helpers
     // =========================================================================
 
- // =========================================================================
+    // =========================================================================
     // Game state fields
     // =========================================================================
 
-    /** grid[col][row], null = empty cell. */
+    /**
+     * grid[col][row], null = empty cell.
+     */
     private Piece[][] grid;
     private int gridCols, gridRows;
 
-    /** Inventory of pieces available to place. */
+    /**
+     * Inventory of pieces available to place.
+     */
     private final Map<String, Integer> inventory = new LinkedHashMap<>();
 
-    /** Which piece type the player has selected in the HUD. */
+    /**
+     * Which piece type the player has selected in the HUD.
+     */
     private String selectedType = "mirror";
 
-    /** Laser segments collected this frame: { x1, y1, x2, y2, argb }. */
+    /**
+     * Laser segments collected this frame: { x1, y1, x2, y2, argb }.
+     */
     private final List<int[]> laserSegments = new ArrayList<>();
 
     // Win-condition counters (updated by checkWin each frame)
-    private int  targetsHit;
-    private int  archesHit;
-    private int  archesTotal;
-    private int  targetGoal;
+    private int targetsHit;
+    private int archesHit;
+    private int archesTotal;
+    private int targetGoal;
     private boolean won;
 
     // =========================================================================
@@ -223,6 +256,7 @@ public class LaserMirrorGame extends MiniGame {
 
     @Override
     public void init(int difficulty) {
+        System.out.println("INIT spellId = " + this.spellId);
         this.gridCols = SIZE;
         this.gridRows = SIZE;
         this.grid = new Piece[SIZE][SIZE];
@@ -232,9 +266,18 @@ public class LaserMirrorGame extends MiniGame {
         goalConnections.clear();
         activeConnections.clear(); // Ensure previous state is wiped
 
+
+
         int[] colors = {
-                0xFFFF3232, 0xFFFFA500, 0xFFFFFF32, 0xFF32FF32,
-                0xFF32FFFF, 0xFF3264FF, 0xFFAA32FF, 0xFFFF32AA
+                0xAA000000, // 1: Red
+                0xAAFF0000, // 2: blue
+                0xAA5555FF,
+                0xAA55FF55, // 3: Green
+                 // 4: black
+                0xAAFF55FF, // 5: Pink
+                0xAA555555, // 6: gray
+                0xAABF00FF, // 7: Orange
+                0xAAFFFFFF  // 8: White
         };
 
         inventory.clear();
@@ -265,21 +308,34 @@ public class LaserMirrorGame extends MiniGame {
             this.goalConnections.addAll(puzzleData.goals);
         }
     }
-
-
+    int GRID_OFFSET_X = 12;
+    int GRID_OFFSET_Y = 24;
 
 
     // =========================================================================
     // MiniGame — render
     // =========================================================================
 
-    /** Pixels per grid cell. */
+    /**
+     * Pixels per grid cell.
+     */
     private static final int CELL = 16;
+    public int getGridOffsetX(int startX) {
+        return startX + GRID_OFFSET_X;
+    }
+
+    public int getGridOffsetY(int startY) {
+        return startY + GRID_OFFSET_Y;
+    }
+
+    public int getCellSize() {
+        return CELL;
+    }
 
     @Override
     public void render(GuiGraphics g, Font font, int mouseX, int mouseY, int startX, int startY) {
-        int gX = startX + 4;
-        int gY = startY + 24;
+        int gX = startX +GRID_OFFSET_X;
+        int gY = startY + GRID_OFFSET_Y;
 
         // Trace lasers first so hit/activated flags are set before drawing pieces
         traceLaser(gX, gY);
@@ -342,10 +398,10 @@ public class LaserMirrorGame extends MiniGame {
         // Inventory list — clickable rows
         int iy = uiY + 48;
         for (Map.Entry<String, Integer> e : inventory.entrySet()) {
-            boolean sel  = e.getKey().equals(selectedType);
-            int     col  = sel ? 0xFFFFFFFF : 0xFF7888A0;
-            String  name = e.getKey();
-            String  abbr = name.substring(0, Math.min(4, name.length())).toUpperCase();
+            boolean sel = e.getKey().equals(selectedType);
+            int col = sel ? 0xFFFFFFFF : 0xFF7888A0;
+            String name = e.getKey();
+            String abbr = name.substring(0, Math.min(4, name.length())).toUpperCase();
             if (sel) g.fill(uiX - 2, iy - 1, uiX + 70, iy + 8, 0x33FFFFFF);
             g.drawString(font, abbr + ": " + e.getValue(), uiX, iy, col);
             iy += 11;
@@ -366,7 +422,7 @@ public class LaserMirrorGame extends MiniGame {
     // =========================================================================
 
     private static final int COL_STATIC = 0xFFFFBE00;  // gold
-    private static final int COL_PIECE  = 0xFFC8D2E6;  // light blue-grey
+    private static final int COL_PIECE = 0xFFC8D2E6;  // light blue-grey
     private static final int COL_ACTIVE = 0xFF32FF96;  // green
 
     private static final int SIZE = 8;
@@ -398,7 +454,7 @@ public class LaserMirrorGame extends MiniGame {
     private void drawPiece(GuiGraphics g, Piece p, int px, int py) {
         int cx = px + CELL / 2;
         int cy = py + CELL / 2;
-        int s  = CELL / 4;            // "small" offset used by several pieces
+        int s = CELL / 4;            // "small" offset used by several pieces
 
         // Glow rule: only targets and arches change colour when activated
         boolean glowing = ("target".equals(p.type) || "arch".equals(p.type)) && !p.activatedColors.isEmpty();
@@ -429,10 +485,10 @@ public class LaserMirrorGame extends MiniGame {
                 // Vertical dir (\) or horizontal dir (/)
                 boolean bslash = Arrays.equals(p.dir, UP) || Arrays.equals(p.dir, DOWN);
                 if (bslash)
-                    drawGradientLine(g, px+2, py+CELL-3, px+CELL-3, py+2,
+                    drawGradientLine(g, px + 2, py + CELL - 3, px + CELL - 3, py + 2,
                             drawCol, brighten(drawCol), 1.4f, 0f, 1f, 0f, 1);
                 else
-                    drawGradientLine(g, px+2, py+2, px+CELL-3, py+CELL-3,
+                    drawGradientLine(g, px + 2, py + 2, px + CELL - 3, py + CELL - 3,
                             drawCol, brighten(drawCol), 1.4f, 0f, 1f, 0f, 1);
                 break;
             }
@@ -441,13 +497,26 @@ public class LaserMirrorGame extends MiniGame {
             case "target": {
                 // Two arms of the "L" meeting at the centre
                 int[] arm1, arm2, nodeSide;
-                if      (Arrays.equals(p.dir, RIGHT)) { arm1=LEFT;  arm2=DOWN;  nodeSide=RIGHT; }
-                else if (Arrays.equals(p.dir, DOWN))  { arm1=UP;    arm2=LEFT;  nodeSide=DOWN;  }
-                else if (Arrays.equals(p.dir, LEFT))  { arm1=RIGHT; arm2=UP;    nodeSide=LEFT;  }
-                else                                   { arm1=DOWN;  arm2=RIGHT; nodeSide=UP;    }
+                if (Arrays.equals(p.dir, RIGHT)) {
+                    arm1 = LEFT;
+                    arm2 = DOWN;
+                    nodeSide = RIGHT;
+                } else if (Arrays.equals(p.dir, DOWN)) {
+                    arm1 = UP;
+                    arm2 = LEFT;
+                    nodeSide = DOWN;
+                } else if (Arrays.equals(p.dir, LEFT)) {
+                    arm1 = RIGHT;
+                    arm2 = UP;
+                    nodeSide = LEFT;
+                } else {
+                    arm1 = DOWN;
+                    arm2 = RIGHT;
+                    nodeSide = UP;
+                }
 
-                drawGradientLine(g, cx, cy, cx-arm1[0]*s, cy-arm1[1]*s, drawCol, drawCol, 1.5f, 0f, 1f, 0f, 1);
-                drawGradientLine(g, cx, cy, cx+arm2[0]*s, cy+arm2[1]*s, drawCol, drawCol, 1.5f, 0f, 1f, 0f, 1);
+                drawGradientLine(g, cx, cy, cx - arm1[0] * s, cy - arm1[1] * s, drawCol, drawCol, 1.5f, 0f, 1f, 0f, 1);
+                drawGradientLine(g, cx, cy, cx + arm2[0] * s, cy + arm2[1] * s, drawCol, drawCol, 1.5f, 0f, 1f, 0f, 1);
 
                 // Entry-node dot
                 int nx = cx - nodeSide[0] * 4;
@@ -457,17 +526,17 @@ public class LaserMirrorGame extends MiniGame {
                 } else {
                     drawColorDots(g, p.activatedColors, nx, ny);
                 }
-                g.fill(nx - 2, ny - 2, nx + 2, ny + 2,0xFF3C3C46);
+                g.fill(nx - 2, ny - 2, nx + 2, ny + 2, 0xFF3C3C46);
                 break;
             }
             case "splitter": {
                 // Vertical dir (\) or horizontal dir (/)
                 boolean bslash = Arrays.equals(p.dir, UP) || Arrays.equals(p.dir, DOWN);
                 if (bslash)
-                    drawGradientLine(g, px+2, py+CELL-3, px+CELL-3, py+2,
+                    drawGradientLine(g, px + 2, py + CELL - 3, px + CELL - 3, py + 2,
                             0x44C8D2E6, 0x44C8D2E6, 1.4f, 0f, 1f, 0f, 1);
                 else
-                    drawGradientLine(g, px+2, py+2, px+CELL-3, py+CELL-3,
+                    drawGradientLine(g, px + 2, py + 2, px + CELL - 3, py + CELL - 3,
                             0x44C8D2E6, 0x44C8D2E6, 1.4f, 0f, 1f, 0f, 1);
                 break;
             }
@@ -475,24 +544,25 @@ public class LaserMirrorGame extends MiniGame {
             case "arch": {
                 boolean horiz = Arrays.equals(p.dir, RIGHT) || Arrays.equals(p.dir, LEFT);
                 if (horiz) {
-                    g.fill(px+2, cy-3, px+CELL-3, cy-1, drawCol);
-                    g.fill(px+2, cy+1, px+CELL-3, cy+3, drawCol);
+                    g.fill(px + 2, cy - 3, px + CELL - 3, cy - 1, drawCol);
+                    g.fill(px + 2, cy + 1, px + CELL - 3, cy + 3, drawCol);
                 } else {
-                    g.fill(cx-3, py+2, cx-1, py+CELL-3, drawCol);
-                    g.fill(cx+1, py+2, cx+3, py+CELL-3, drawCol);
+                    g.fill(cx - 3, py + 2, cx - 1, py + CELL - 3, drawCol);
+                    g.fill(cx + 1, py + 2, cx + 3, py + CELL - 3, drawCol);
                 }
                 break;
             }
 
             // ── Blocker / wall ────────────────────────────────────────────
             case "blocker": {
-                g.fill(px+2, py+2, px+CELL-3, py+CELL-3, 0xFF282D41);
+                g.fill(px + 2, py + 2, px + CELL - 3, py + CELL - 3, 0xFF282D41);
                 // Subtle top-edge highlight to suggest depth
-                g.fill(px+2, py+2, px+CELL-3, py+4, 0xFF3A3F58);
+                g.fill(px + 2, py + 2, px + CELL - 3, py + 4, 0xFF3A3F58);
                 break;
             }
         }
     }
+
     private void drawColorDots(GuiGraphics g, Set<Integer> colors, int cx, int cy) {
         if (colors.isEmpty()) return;
 
@@ -522,7 +592,7 @@ public class LaserMirrorGame extends MiniGame {
     }
 
     private String connectionKey(int a, int b) {
-        return (Math.min(a,b)) + "-" + (Math.max(a,b));
+        return (Math.min(a, b)) + "-" + (Math.max(a, b));
     }
 
     private void traceLaser(int gX, int gY) {
@@ -532,7 +602,10 @@ public class LaserMirrorGame extends MiniGame {
         // Reset all piece flags
         for (int x = 0; x < gridCols; x++)
             for (int y = 0; y < gridRows; y++)
-                if (grid[x][y] != null) { grid[x][y].hitColors.clear(); grid[x][y].activatedColors.clear(); }
+                if (grid[x][y] != null) {
+                    grid[x][y].hitColors.clear();
+                    grid[x][y].activatedColors.clear();
+                }
 
         // Seed the queue with every emitter on the board
         // Seed the queue: { x, y, dx, dy, color, sourceId }
@@ -542,7 +615,7 @@ public class LaserMirrorGame extends MiniGame {
                 Piece p = grid[x][y];
                 if (p != null && "emitter".equals(p.type)) {
                     int id = getEmitterId(x, y);
-                    queue.add(new int[]{ x, y, p.dir[0], p.dir[1], p.color, id });
+                    queue.add(new int[]{x, y, p.dir[0], p.dir[1], p.color, id});
                 }
             }
         }
@@ -554,7 +627,7 @@ public class LaserMirrorGame extends MiniGame {
         while (!queue.isEmpty()) {
             int[] start = queue.poll();
             int cx = start[0], cy = start[1];
-            int[] d = { start[2], start[3] };
+            int[] d = {start[2], start[3]};
             int argb = start[4];
             int sourceId = start[5];
 
@@ -562,7 +635,7 @@ public class LaserMirrorGame extends MiniGame {
             while (cx >= 0 && cx < gridCols && cy >= 0 && cy < gridRows) {
 
                 // Include sourceId in the key to allow multiple beams to overlap
-                long key = ((long) sourceId << 50) | ((long) cx << 30) | ((long) cy << 15) | ((long)(d[0]+2) << 5) | (d[1]+2);
+                long key = ((long) sourceId << 50) | ((long) cx << 30) | ((long) cy << 15) | ((long) (d[0] + 2) << 5) | (d[1] + 2);
 
                 if (visited.contains(key)) break;
                 visited.add(key);
@@ -583,8 +656,8 @@ public class LaserMirrorGame extends MiniGame {
                     int ey = cpy + d[1] * CELL / 2;
 
                     // DRAW BOTH HALVES
-                    laserSegments.add(new int[]{ sx, sy, cpx, cpy, argb }); // edge → center
-                    laserSegments.add(new int[]{ cpx, cpy, ex, ey, argb }); // center → edge
+                    laserSegments.add(new int[]{sx, sy, cpx, cpy, argb}); // edge → center
+                    laserSegments.add(new int[]{cpx, cpy, ex, ey, argb}); // center → edge
 
                     cx += d[0];
                     cy += d[1];
@@ -611,7 +684,7 @@ public class LaserMirrorGame extends MiniGame {
 // ─────────────────────────────
                 if (piece != null) {
                     // 1. Draw the incoming beam (edge to center)
-                    laserSegments.add(new int[]{ sx, sy, cpx, cpy, argb });
+                    laserSegments.add(new int[]{sx, sy, cpx, cpy, argb});
 
                     List<int[]> outputs = piece.getOutputs(d, argb);
 
@@ -620,7 +693,7 @@ public class LaserMirrorGame extends MiniGame {
                         // Draw the outgoing segment (center to edge)
                         int ex = cpx + outDir[0] * CELL / 2;
                         int ey = cpy + outDir[1] * CELL / 2;
-                        laserSegments.add(new int[]{ cpx, cpy, ex, ey, argb });
+                        laserSegments.add(new int[]{cpx, cpy, ex, ey, argb});
 
                         // Queue the next cell
                         queue.add(new int[]{
@@ -648,12 +721,14 @@ public class LaserMirrorGame extends MiniGame {
         checkWin();
     }
 
-    /** Maps emitter direction to its beam ARGB colour. */
+    /**
+     * Maps emitter direction to its beam ARGB colour.
+     */
     private static int emitterArgb(int[] dir) {
         if (Arrays.equals(dir, RIGHT)) return 0xCCFF3232;  // red
-        if (Arrays.equals(dir, LEFT))  return 0xCC3264FF;  // blue
-        if (Arrays.equals(dir, DOWN))  return 0xCC32C832;  // green
-        return                                0xCCFFBE00;  // yellow (UP)
+        if (Arrays.equals(dir, LEFT)) return 0xCC3264FF;  // blue
+        if (Arrays.equals(dir, DOWN)) return 0xCC32C832;  // green
+        return 0xCCFFBE00;  // yellow (UP)
     }
 
     // =========================================================================
@@ -692,14 +767,18 @@ public class LaserMirrorGame extends MiniGame {
     }
 
     @Override
-    public boolean isWon() { return won; }
+    public boolean isWon() {
+        return won;
+    }
 
     /**
      * No hard-fail state: the player can always rotate or pick up unlocked
      * pieces to try a different configuration.
      */
     @Override
-    public boolean isLost() { return false; }
+    public boolean isLost() {
+        return false;
+    }
 
     // =========================================================================
     // MiniGame — handleInput
@@ -716,17 +795,17 @@ public class LaserMirrorGame extends MiniGame {
      */
     @Override
     public void handleInput(double mouseX, double mouseY, int button, int startX, int startY) {
-        int gX = startX + 4;
-        int gY = startY + 24;
+        int gX = startX +GRID_OFFSET_X;
+        int gY = startY + GRID_OFFSET_Y;
 
-        int gx = (int)(mouseX - gX) / CELL;
-        int gy = (int)(mouseY - gY) / CELL;
+        int gx = (int) (mouseX - gX) / CELL;
+        int gy = (int) (mouseY - gY) / CELL;
 
         // ── HUD panel ─────────────────────────────────────────────────────────
         if (gx >= gridCols) {
             int uiX = gX + gridCols * CELL + 6;
             int uiY = gY + 48;
-            int row = (int)(mouseY - uiY) / 11;
+            int row = (int) (mouseY - uiY) / 11;
             List<String> keys = new ArrayList<>(inventory.keySet());
             if (row >= 0 && row < keys.size()) selectedType = keys.get(row);
             return;
@@ -749,7 +828,7 @@ public class LaserMirrorGame extends MiniGame {
             }
         } else if (button == 1) {
             // Right-click: pick up unlocked piece and return to inventory
-            if (existing != null && !existing.isLocked&& !existing.isStatic) {
+            if (existing != null && !existing.isLocked && !existing.isStatic) {
                 inventory.merge(existing.type, 1, Integer::sum);
                 grid[gx][gy] = null;
             }
@@ -760,13 +839,20 @@ public class LaserMirrorGame extends MiniGame {
     // Utilities
     // =========================================================================
 
-    /** Mixes an ARGB colour 50% toward white (used for the beam highlight). */
+    /**
+     * Mixes an ARGB colour 50% toward white (used for the beam highlight).
+     */
     private static int brighten(int argb) {
         int a = (argb >> 24) & 0xFF;
         int r = Math.min(255, (((argb >> 16) & 0xFF) + 255) / 2);
-        int g = Math.min(255, (((argb >>  8) & 0xFF) + 255) / 2);
-        int b = Math.min(255, (( argb        & 0xFF) + 255) / 2);
+        int g = Math.min(255, (((argb >> 8) & 0xFF) + 255) / 2);
+        int b = Math.min(255, ((argb & 0xFF) + 255) / 2);
         return (a << 24) | (r << 16) | (g << 8) | b;
+    }
+    public void loadSpellId(CompoundTag root) {
+        if (root.contains("spellId", Tag.TAG_STRING)) {
+            this.spellId = root.getString("spellId");
+        }
     }
 
     // =========================================================================
@@ -781,13 +867,13 @@ public class LaserMirrorGame extends MiniGame {
 
         if (Math.abs(x1 - x2) < 0.01f && Math.abs(y1 - y2) < 0.01f) return;
 
-        Matrix4f       matrix   = guiGraphics.pose().last().pose();
+        Matrix4f matrix = guiGraphics.pose().last().pose();
         VertexConsumer consumer = guiGraphics.bufferSource().getBuffer(RenderType.gui());
 
-        float r1 = ((color1 >> 16) & 0xFF) / 255f,  g1 = ((color1 >>  8) & 0xFF) / 255f;
-        float b1 = ( color1        & 0xFF) / 255f,   a1 = (((color1 >> 24) & 0xFF) / 255f) * alphaMult;
-        float r2 = ((color2 >> 16) & 0xFF) / 255f,  g2 = ((color2 >>  8) & 0xFF) / 255f;
-        float b2 = ( color2        & 0xFF) / 255f,   a2 = (((color2 >> 24) & 0xFF) / 255f) * alphaMult;
+        float r1 = ((color1 >> 16) & 0xFF) / 255f, g1 = ((color1 >> 8) & 0xFF) / 255f;
+        float b1 = (color1 & 0xFF) / 255f, a1 = (((color1 >> 24) & 0xFF) / 255f) * alphaMult;
+        float r2 = ((color2 >> 16) & 0xFF) / 255f, g2 = ((color2 >> 8) & 0xFF) / 255f;
+        float b2 = (color2 & 0xFF) / 255f, a2 = (((color2 >> 24) & 0xFF) / 255f) * alphaMult;
 
         float sdx = x2 - x1, sdy = y2 - y1, len = (float) Math.sqrt(sdx * sdx + sdy * sdy);
         float nx = -sdy / len, ny = sdx / len;
@@ -799,24 +885,104 @@ public class LaserMirrorGame extends MiniGame {
         float lastR = r1, lastG = g1, lastB = b1, lastA = a1;
 
         for (int i = 1; i <= segments; i++) {
-            float t  = (float) i / segments;
+            float t = (float) i / segments;
             float nx2 = x1 + sdx * t, ny2 = y1 + sdy * t, ct = thicknessMult;
             if (i < segments && jitter > 0f) {
-                rand.setSeed(frameSeed + i + (long)(x1 * 100));
+                rand.setSeed(frameSeed + i + (long) (x1 * 100));
                 nx2 += (rand.nextFloat() - 0.5f) * jitter;
                 ny2 += (rand.nextFloat() - 0.5f) * jitter;
-                ct  *= (0.8f + rand.nextFloat() * 0.4f);
+                ct *= (0.8f + rand.nextFloat() * 0.4f);
             }
-            float cr = r1+(r2-r1)*t, cg = g1+(g2-g1)*t, cb = b1+(b2-b1)*t, ca = a1+(a2-a1)*t;
-            float o1x = nx*(lastT/2f), o1y = ny*(lastT/2f);
-            float o2x = nx*(ct/2f),   o2y = ny*(ct/2f);
+            float cr = r1 + (r2 - r1) * t, cg = g1 + (g2 - g1) * t, cb = b1 + (b2 - b1) * t, ca = a1 + (a2 - a1) * t;
+            float o1x = nx * (lastT / 2f), o1y = ny * (lastT / 2f);
+            float o2x = nx * (ct / 2f), o2y = ny * (ct / 2f);
 
-            consumer.vertex(matrix, lastX-o1x, lastY-o1y, z).color(lastR,lastG,lastB,lastA).endVertex();
-            consumer.vertex(matrix, lastX+o1x, lastY+o1y, z).color(lastR,lastG,lastB,lastA).endVertex();
-            consumer.vertex(matrix, nx2 +o2x,  ny2 +o2y,  z).color(cr,   cg,   cb,   ca   ).endVertex();
-            consumer.vertex(matrix, nx2 -o2x,  ny2 -o2y,  z).color(cr,   cg,   cb,   ca   ).endVertex();
+            consumer.vertex(matrix, lastX - o1x, lastY - o1y, z).color(lastR, lastG, lastB, lastA).endVertex();
+            consumer.vertex(matrix, lastX + o1x, lastY + o1y, z).color(lastR, lastG, lastB, lastA).endVertex();
+            consumer.vertex(matrix, nx2 + o2x, ny2 + o2y, z).color(cr, cg, cb, ca).endVertex();
+            consumer.vertex(matrix, nx2 - o2x, ny2 - o2y, z).color(cr, cg, cb, ca).endVertex();
 
-            lastX=nx2; lastY=ny2; lastT=ct; lastR=cr; lastG=cg; lastB=cb; lastA=ca;
+            lastX = nx2;
+            lastY = ny2;
+            lastT = ct;
+            lastR = cr;
+            lastG = cg;
+            lastB = cb;
+            lastA = ca;
+        }
+    }
+
+    public CompoundTag serializeToNBT() {
+        CompoundTag root = new CompoundTag();
+        ListTag list = new ListTag();
+
+        for (int x = 0; x < gridCols; x++) {
+            for (int y = 0; y < gridRows; y++) {
+                Piece p = grid[x][y];
+                if (p != null && !p.isLocked) {
+                    CompoundTag entry = new CompoundTag();
+                    entry.putInt("x", x);
+                    entry.putInt("y", y);
+                    entry.putString("type", p.type);
+                    entry.putInt("dirX", p.dir[0]);
+                    entry.putInt("dirY", p.dir[1]);
+                    entry.putBoolean("isStatic", p.isStatic);
+                    list.add(entry);
+                }
+            }
+        }
+
+        root.put("pieces", list);
+
+        CompoundTag inv = new CompoundTag();
+        for (Map.Entry<String, Integer> e : inventory.entrySet()) {
+            inv.putInt(e.getKey(), e.getValue());
+        }
+        root.put("inventory", inv);
+
+        // ✅ ADD THIS
+        if (spellId != null) {
+            root.putString("spellId", spellId);
+        }
+
+        return root;
+    }
+
+// ─── deserializeFromNBT ───────────────────────────────────────────────────────
+
+    /**
+     * Restores player-placed pieces from a previously serialized tag.
+     * Locked (emitter) cells are left untouched because they are already set by
+     * {@link #init}.
+     */
+    public void deserializeFromNBT(CompoundTag root) {
+        if (root == null) return;
+
+
+        // Restore placed pieces
+        ListTag list = root.getList("pieces", Tag.TAG_COMPOUND);
+        for (int i = 0; i < list.size(); i++) {
+            CompoundTag entry = list.getCompound(i);
+            int x = entry.getInt("x");
+            int y = entry.getInt("y");
+
+            if (x < 0 || x >= gridCols || y < 0 || y >= gridRows) continue;
+
+            Piece existing = grid[x][y];
+            if (existing != null && existing.isLocked) continue;
+
+            String type = entry.getString("type");
+            int[] dir = {entry.getInt("dirX"), entry.getInt("dirY")};
+            boolean stat = entry.getBoolean("isStatic");
+
+            grid[x][y] = new Piece(type, dir, stat, false, 0xFFFFFF);
+        }
+
+        if (root.contains("inventory", Tag.TAG_COMPOUND)) {
+            CompoundTag inv = root.getCompound("inventory");
+            for (String key : inv.getAllKeys()) {
+                inventory.put(key, inv.getInt(key));
+            }
         }
     }
 }

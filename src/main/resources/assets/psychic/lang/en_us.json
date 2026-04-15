@@ -4,5 +4,16 @@
   "key.psychic.confirm": "Confirm Spell Selection",
   "psychic.casting_screen.cast_instruction": "Enter a spell, press %s to confirm",
   "item.psychic.liber_chaotica": "Liber Chaotica",
-  "block.psychic.research_table": "Research Table"
+  "item.psychic.phthora_essence": "Phthora Essence",
+  "item.psychic.kyklos_essence": "Kyklos Essence",
+  "item.psychic.metabole_essence": "Metabole Essence",
+  "item.psychic.mousike_essence": "Mousike Essence",
+  "item.psychic.misos_essence": "Misos Essence",
+  "item.psychic.energia_essence": "Energia Essence",
+  "item.psychic.techne_essence": "Techne Essence",
+  "item.psychic.thymos_essence": "Thymos Essence",
+
+  "block.psychic.research_table": "Research Table",
+
+  "creativetab.psychic_tab": "Psychic"
 }

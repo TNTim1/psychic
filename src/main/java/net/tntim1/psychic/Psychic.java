@@ -33,6 +33,7 @@ import net.tntim1.psychic.block.entity.ModBlockEntities;
 import net.tntim1.psychic.block.entity.ModMenus;
 import net.tntim1.psychic.block.entity.ResearchTableScreen;
 import net.tntim1.psychic.capability.PsychicCapability;
+import net.tntim1.psychic.item.ModCreativeModeTabs;
 import net.tntim1.psychic.item.ModItems;
 import net.tntim1.psychic.network.*;
 import net.tntim1.psychic.player_data.ClientKnowledge;
@@ -50,6 +51,8 @@ public class Psychic
 
     public Psychic(FMLJavaModLoadingContext context) {
         IEventBus modEventBus = context.getModEventBus();
+
+        ModCreativeModeTabs.register(modEventBus);
 
         ModItems.register(modEventBus);
         ModBlocks.register(modEventBus); // Add this

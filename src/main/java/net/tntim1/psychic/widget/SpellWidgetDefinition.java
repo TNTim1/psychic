@@ -9,10 +9,11 @@ public class SpellWidgetDefinition extends WidgetDefinition {
     public final List<Integer> pattern;
     public final int size;
 
-    public SpellWidgetDefinition(String id, String title, String description, List<Integer> pattern, int size) {
+    public SpellWidgetDefinition(String id, String title, String description, List<Integer> pattern, ResourceLocation texture, int size) {
         super(
                 id,
-                new ResourceLocation("psychic", "textures/gui/widgets/spell_default.png"),
+                texture,
+
                 0, 0,
                 size, size,
                 title,

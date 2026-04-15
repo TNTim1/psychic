@@ -12,6 +12,7 @@ import net.tntim1.psychic.block.entity.NoPuzzlePacket;
 import net.tntim1.psychic.block.entity.RequestPuzzlePacket;
 import net.tntim1.psychic.block.entity.StartPuzzlePacket;
 import net.tntim1.psychic.network.SyncSpellHistoryPacket;
+import org.checkerframework.checker.units.qual.C;
 
 public class ModPackets {
     private static SimpleChannel INSTANCE;
@@ -30,6 +31,7 @@ public class ModPackets {
                 .simpleChannel();
 
         INSTANCE = net;
+
 
         // ── SERVER → CLIENT ───────────────────────────────────────────────────
 
@@ -100,10 +102,35 @@ public class ModPackets {
                 .consumerMainThread(ActivateWidgetPacket::handle)
                 .add();
 
+        net.messageBuilder(SaveGameStatePacket.class, id(), NetworkDirection.PLAY_TO_SERVER)
+                .decoder(SaveGameStatePacket::new)
+                .encoder(SaveGameStatePacket::toBytes)
+                .consumerMainThread(SaveGameStatePacket::handle)
+                .add();
+
         net.messageBuilder(DeactivateWidgetPacket.class, id(), NetworkDirection.PLAY_TO_SERVER)
                 .decoder(DeactivateWidgetPacket::decode)
                 .encoder(DeactivateWidgetPacket::encode)
                 .consumerMainThread(DeactivateWidgetPacket::handle)
+                .add();
+
+
+        net.messageBuilder(WarpSyncPacket.class, id(), NetworkDirection.PLAY_TO_CLIENT)
+                .decoder(WarpSyncPacket::decode)
+                .encoder(WarpSyncPacket::encode)
+                .consumerMainThread(WarpSyncPacket::handle)
+                .add();
+
+        net.messageBuilder(RequestWarpPacket.class, id(), NetworkDirection.PLAY_TO_SERVER)
+                .decoder(RequestWarpPacket::decode)
+                .encoder(RequestWarpPacket::encode)
+                .consumerMainThread(RequestWarpPacket::handle)
+                .add();
+
+        net.messageBuilder(CastSpellPacket.class, id(), NetworkDirection.PLAY_TO_SERVER)
+                .decoder(CastSpellPacket::decode)
+                .encoder(CastSpellPacket::encode)
+                .consumerMainThread(CastSpellPacket::handle)
                 .add();
     }
 

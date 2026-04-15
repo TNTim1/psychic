@@ -1,29 +1,42 @@
 package net.tntim1.psychic.block.entity;
 
-import net.minecraft.server.level.ServerPlayer;
-import net.tntim1.psychic.capability.PsychicCapability;
+import net.tntim1.psychic.Spells.SpellDefinition;
+import net.tntim1.psychic.Spells.SpellRegistry;
 import java.util.List;
-import java.util.Map;
+import java.util.stream.Collectors;
 
 public class LaserPuzzle {
     public final String spellId;
-    public final int difficulty;
     public final List<List<Integer>> goals;
 
-    public LaserPuzzle(String spellId, int difficulty, List<List<Integer>> goals) {
+    public LaserPuzzle(String spellId) {
         this.spellId = spellId;
-        this.difficulty = difficulty;
-        this.goals = goals;
+        this.goals = fetchGoalsFromRegistry(spellId);
     }
 
-    // Central Registry of Spell Goals
-    public static final Map<String, LaserPuzzle> PUZZLES = Map.of(
-            "fire_beam", new LaserPuzzle("fire_beam", 0, List.of(List.of(1, 4))),
-            "ice_shard", new LaserPuzzle("ice_shard", 1, List.of(List.of(1, 3), List.of(2, 4))),
-            "chain_lightning", new LaserPuzzle("chain_lightning", 2, List.of(List.of(1, 2), List.of(3, 4), List.of(1, 3)))
-    );
+    private List<List<Integer>> fetchGoalsFromRegistry(String id) {
+        SpellDefinition spell = SpellRegistry.get(id);
 
+        // If the spell doesn't exist, return an empty list or a default
+        if (spell == null) return List.of();
+
+        // Convert Set<Set<Integer>> to List<List<Integer>>
+        return spell.pattern.stream()
+                .map(set -> set.stream().collect(Collectors.toList()))
+                .collect(Collectors.toList());
+    }
+
+    // Static helper to create a puzzle instance
+    public static LaserPuzzle create(String spellId) {
+        return new LaserPuzzle(spellId);
+    }
     public static LaserPuzzle get(String spellId) {
-        return PUZZLES.getOrDefault(spellId, PUZZLES.get("fire_beam"));
+        // We call the constructor, which runs fetchGoalsFromRegistry
+        LaserPuzzle puzzle = new LaserPuzzle(spellId);
+
+        // If the registry didn't have the spell, goals will be empty.
+        // You could return a default here if you prefer.
+        return puzzle;
     }
+
 }

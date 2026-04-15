@@ -14,6 +14,9 @@ import net.minecraft.server.level.ServerLevel;
 import net.tntim1.psychic.Keybinds.KeyInit;
 import net.tntim1.psychic.Spells.WorldSpellData;
 import net.tntim1.psychic.UI.Rhythm.RhythmNote;
+import net.tntim1.psychic.network.CastSpellPacket;
+import net.tntim1.psychic.network.ModPackets;
+import net.tntim1.psychic.network.RequestWarpPacket;
 import org.joml.Matrix4f;
 import org.lwjgl.glfw.GLFW;
 
@@ -26,6 +29,8 @@ import java.util.Set;
 public class CastingUi extends Screen {
     private static final ResourceLocation TEXTURE = new ResourceLocation("psychic", "textures/gui/casting_ui.png");
     private static final ResourceLocation SHADER_LOC = new ResourceLocation("psychic", "casting_tint");
+
+    private String currentSpellId = null;
 
     private final long[] feedbackExpiry = new long[8];
     private final int[] feedbackColor = new int[8];
@@ -49,6 +54,8 @@ public class CastingUi extends Screen {
     private float accuracy = 100.0f;
     private int earnedPoints = 0;
     private int maxPossiblePoints = 0;
+
+    private int warpStrength = 0;
 
     private static final int[] BUTTON_COLORS = {
             0xFFFF0000, // 1: Red
@@ -86,11 +93,12 @@ public class CastingUi extends Screen {
     }
 
     @Override public void onClose() { super.onClose(); if (tintShader != null) tintShader.close(); }
-    @Override protected void init() { super.init(); Minecraft.getInstance().mouseHandler.releaseMouse(); }
+    @Override protected void init() { super.init(); Minecraft.getInstance().mouseHandler.releaseMouse();  ModPackets.sendToServer(new RequestWarpPacket());}
     @Override public boolean isPauseScreen() { return false; }
 
     // --- Logic ---
     private void startRhythmGame(String spellName) {
+        this.currentSpellId = spellName;
         this.uiState = 1;
         this.rhythmStartTime = System.currentTimeMillis();
         this.activeNotes.clear();
@@ -98,11 +106,22 @@ public class CastingUi extends Screen {
             activeNotes.add(new RhythmNote((int)(Math.random()*8), 2000 + (i * 800L)));
         }
     }
+    public void setWarpStrength(int value) {
+        this.warpStrength = value;
+    }
 
     @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         float scale = getScale();
         int centerX = this.width / 2;
+
+        guiGraphics.drawString(
+                this.font,
+                "Warp: " + warpStrength,
+                10,
+                10,
+                0xAA00FF
+        );
 
         // --- 1. Render Background ---
         guiGraphics.pose().pushPose();
@@ -145,6 +164,11 @@ public class CastingUi extends Screen {
     }
     private void sendCompletionMessage() {
         if (Minecraft.getInstance().player != null) {
+            // Send to server to actually execute the spell
+            if (currentSpellId != null) {
+                ModPackets.sendToServer(new CastSpellPacket(currentSpellId, accuracy));
+            }
+
             String color = accuracy >= 90 ? "§6" : (accuracy >= 70 ? "§e" : "§7");
             Minecraft.getInstance().player.displayClientMessage(
                     Component.literal(String.format("§b✨ Spell Cast! Final Accuracy: %s%.1f%%", color, accuracy)),
@@ -152,7 +176,6 @@ public class CastingUi extends Screen {
             );
         }
     }
-
     // --- Updated renderButtons Logic ---
     private void renderButtons(GuiGraphics guiGraphics) {
         int r = buttonScreenRadius();
@@ -414,44 +437,51 @@ public class CastingUi extends Screen {
     }
 
     private void processSpellCheck() {
-        String foundSpell = null;
-        boolean existsInGame = false;
+        String foundSpellId = null;
 
-        // 1. First, check if the pattern matches ANY spell in the game data
-        if (Minecraft.getInstance().getSingleplayerServer() != null) {
-            ServerLevel level = Minecraft.getInstance().getSingleplayerServer().overworld();
-            WorldSpellData data = WorldSpellData.get(level);
-
-            for (String name : data.getSpellPatterns().keySet()) {
-                if (data.checkMatch(name, this.sequence)) {
-                    foundSpell = name;
-                    existsInGame = true;
-                    break;
-                }
+        // 1. Iterate through the static Registry (Available on Client)
+        for (Map.Entry<String, net.tntim1.psychic.Spells.SpellDefinition> entry : net.tntim1.psychic.Spells.SpellRegistry.SPELLS.entrySet()) {
+            // We simulate the match check here on the client
+            if (checkMatchLocal(entry.getValue().pattern)) {
+                foundSpellId = entry.getKey();
+                break;
             }
         }
 
-        if (existsInGame) {
-            // 2. Check if the player actually has this specific spell unlocked
-            // We use the ClientKnowledge class we built earlier
-            if (net.tntim1.psychic.player_data.ClientKnowledge.isUnlocked(foundSpell)) {
-                // Success: Clear lines and start the rhythm game
+        if (foundSpellId != null) {
+            // 2. Check knowledge
+            if (net.tntim1.psychic.player_data.ClientKnowledge.isUnlocked(foundSpellId)) {
                 this.completedLines.clear();
-                startRhythmGame(foundSpell);
+                startRhythmGame(foundSpellId);
                 Minecraft.getInstance().player.displayClientMessage(
-                        Component.literal("§b✔ Casting " + foundSpell + "..."), true);
+                        Component.literal("§b✔ Casting " + foundSpellId + "..."), true);
+
             } else {
-                // Failure: Pattern is right, but knowledge is missing
                 clearSequence();
                 Minecraft.getInstance().player.displayClientMessage(
-                        Component.literal("§6⚠ You haven't researched this spell yet!"), true);
+                        Component.literal("§6⚠ Research Required!"), true);
             }
         } else {
-            // Failure: The pattern doesn't correspond to any spell
             clearSequence();
             Minecraft.getInstance().player.displayClientMessage(
                     Component.literal("§c✘ Invalid Pattern"), true);
         }
+    }
+
+    /**
+     * Local helper to see if current sequence matches a pattern
+     */
+    private boolean checkMatchLocal(Set<Set<Integer>> requiredPattern) {
+        if (this.sequence.size() < 2 || this.sequence.size() % 2 != 0) return false;
+
+        Set<Set<Integer>> inputConnections = new java.util.HashSet<>();
+        for (int i = 0; i < this.sequence.size() - 1; i += 2) {
+            Set<Integer> pair = new java.util.HashSet<>();
+            pair.add(this.sequence.get(i));
+            pair.add(this.sequence.get(i + 1));
+            inputConnections.add(pair);
+        }
+        return inputConnections.equals(requiredPattern);
     }
 
 

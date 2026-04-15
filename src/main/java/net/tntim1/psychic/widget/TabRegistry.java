@@ -2,10 +2,15 @@ package net.tntim1.psychic.widget;
 
 import net.minecraft.resources.ResourceLocation;
 import net.tntim1.psychic.Keybinds.KeyInit;
+import net.tntim1.psychic.Spells.SpellAction;
+import net.tntim1.psychic.Spells.SpellDefinition;
+import net.tntim1.psychic.Spells.SpellRegistry;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public class TabRegistry {
 
@@ -174,7 +179,7 @@ public class TabRegistry {
         // ── Mind Probe / Psychic Awakening ────────────────────────────────────────
         psychic.addWidget(WidgetDefinition.simple(
                 "psychic_awakening",
-                new ResourceLocation("minecraft", "textures/item/compass.png"),
+                new ResourceLocation("psychic", "textures/item/liber_chaotica.png"),
                 0, 0,
                 "Psychic Awakening",
                 PopupContent.page(
@@ -186,77 +191,16 @@ public class TabRegistry {
                 null, // No dependencies
                 false // No confirmation checkbox
         ));
-        psychic.addSpell(new SpellWidgetDefinition(
-                "fireball",
-                "Fireball Pattern",
-                "A basic pyromancy spell.",
-                List.of(1, 4, 4, 6, 6, 2),
-                80 // Just the size
-        ));
-        psychic.addSpell(new SpellWidgetDefinition(
-                "fireball2",
-                "Fireball Pattern",
-                "A basic pyromancy spell.",
-                List.of(1, 4, 4, 6, 6, 2),
-                80 // Just the size
-        ));
-        psychic.addSpell(new SpellWidgetDefinition(
-                "fireball3",
-                "Fireball Pattern",
-                "A basic pyromancy spell.",
-                List.of(1, 4, 4, 6, 6, 2),
-                80 // Just the size
-        ));
-        psychic.addSpell(new SpellWidgetDefinition(
-                "fire_beam",
-                "firebeam Pattern",
-                "A basic pyromancy spell.",
-                List.of(3, 4, 4, 6, 6, 2),
-                80 // Just the size
-        ));
-        psychic.addSpell(new SpellWidgetDefinition(
-                "firebeam",
-                "firebeam Pattern",
-                "A basic pyromancy spell.",
-                List.of(1, 4, 7, 6, 6, 2),
-                80 // Just the size
-        ));
-        psychic.addSpell(new SpellWidgetDefinition(
-                "fireball4",
-                "Fireball Pattern",
-                "A basic pyromancy spell.",
-                List.of(1, 4, 4, 6, 6, 2),
-                80 // Just the size
-        ));
-        psychic.addSpell(new SpellWidgetDefinition(
-                "fireball5",
-                "Fireball Pattern",
-                "A basic pyromancy spell.",
-                List.of(1, 4, 4, 6, 6, 2),
-                80 // Just the size
-        ));
-        psychic.addSpell(new SpellWidgetDefinition(
-                "fireball6",
-                "Fireball Pattern",
-                "A basic pyromancy spell.",
-                List.of(1, 4, 4, 6, 6, 2),
-                80 // Just the size
-        ));
-        psychic.addSpell(new SpellWidgetDefinition(
-                "fireball7",
-                "Fireball Pattern",
-                "A basic pyromancy spell.",
-                List.of(1, 4, 4, 6, 6, 2),
-                80 // Just the size
-        ));
-        psychic.addSpell(new SpellWidgetDefinition(
-                "fireball8",
-                "Fireball Pattern",
-                "A basic pyromancy spell.",
-                List.of(1, 4, 4, 6, 6, 2),
-                80 // Just the size
-        ));
 
+
+        for (String key : SpellRegistry.SPELLS.keySet()) {
+            SpellDefinition spell = SpellRegistry.get(key);
+            psychic.addSpell(new SpellWidgetDefinition(
+                    key, spell.title, spell.description,  spell.displayPattern, spell.texture,40
+
+                    )
+            );
+        }
 
 
 
