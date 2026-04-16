@@ -30,6 +30,8 @@ public class ModCreativeModeTabs {
                         output.accept(ModItems.TECHNE_ESSENCE.get());
                         output.accept(ModItems.THYMOS_ESSENCE.get());
                         output.accept(ModBlocks.RESEARCH_TABLE.get());
+                        output.accept(ModItems.AETHER_PIPE_ITEM.get());
+                        output.accept(ModItems.AETHER_TANK_ITEM.get());
                     })
                     .build());
 

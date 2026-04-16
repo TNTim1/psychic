@@ -15,6 +15,17 @@ public class ModBlockEntities {
             BLOCK_ENTITIES.register("research_table", () ->
                     BlockEntityType.Builder.of(ResearchTableBlockEntity::new,
                             ModBlocks.RESEARCH_TABLE.get()).build(null));
+    public static final RegistryObject<BlockEntityType<AetherTankBlockEntity>> AETHER_TANK =
+            BLOCK_ENTITIES.register("aether_tank", () ->
+                    BlockEntityType.Builder
+                            .of(AetherTankBlockEntity::new, ModBlocks.AETHER_TANK.get())
+                            .build(null));
+
+    public static final RegistryObject<BlockEntityType<AetherPipeBlockEntity>> AETHER_PIPE =
+            BLOCK_ENTITIES.register("aether_pipe", () ->
+                    BlockEntityType.Builder
+                            .of(AetherPipeBlockEntity::new, ModBlocks.AETHER_PIPE.get())
+                            .build(null));
 
     public static void register(IEventBus eventBus) {
         BLOCK_ENTITIES.register(eventBus);

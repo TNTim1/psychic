@@ -1,0 +1,20 @@
+{
+  "parent": "block/block",
+  "textures": {
+    "pipe": "psychic:block/aether_pipe",
+    "particle": "psychic:block/aether_pipe"
+  },
+  "elements": [
+    {
+      "from": [6, 11, 6],
+      "to": [10, 16, 10],
+      "faces": {
+        "north": { "texture": "#pipe", "uv": [6, 0, 10, 5] },
+        "south": { "texture": "#pipe", "uv": [6, 0, 10, 5] },
+        "east":  { "texture": "#pipe", "uv": [6, 0, 10, 5] },
+        "west":  { "texture": "#pipe", "uv": [6, 0, 10, 5] },
+        "up":    { "texture": "#pipe", "uv": [6, 6, 10, 10] }
+      }
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "multipart": [
+    { "apply": { "model": "psychic:block/aether_pipe_core" } },
+    { "when": { "up": "true" },    "apply": { "model": "psychic:block/aether_pipe_leg" } },
+    { "when": { "down": "true" },  "apply": { "model": "psychic:block/aether_pipe_leg", "x": 180 } },
+    { "when": { "north": "true" }, "apply": { "model": "psychic:block/aether_pipe_leg", "x": 90 } },
+    { "when": { "south": "true" }, "apply": { "model": "psychic:block/aether_pipe_leg", "x": 270 } },
+    { "when": { "east": "true" },  "apply": { "model": "psychic:block/aether_pipe_leg", "x": 90, "y": 90 } },
+    { "when": { "west": "true" },  "apply": { "model": "psychic:block/aether_pipe_leg", "x": 90, "y": 270 } }
+  ]
+}

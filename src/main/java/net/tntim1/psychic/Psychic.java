@@ -4,12 +4,15 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.logging.LogUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.MenuScreens;
+import net.minecraft.client.renderer.ItemBlockRenderTypes;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
+import net.minecraftforge.client.event.EntityRenderersEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.common.capabilities.Capability;
 import net.minecraftforge.common.capabilities.CapabilityManager;
@@ -29,10 +32,12 @@ import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.tntim1.psychic.Keybinds.KeyInit;
 import net.tntim1.psychic.UI.CastingUi;
 import net.tntim1.psychic.block.ModBlocks;
+import net.tntim1.psychic.block.entity.AetherTankRenderer;
 import net.tntim1.psychic.block.entity.ModBlockEntities;
 import net.tntim1.psychic.block.entity.ModMenus;
 import net.tntim1.psychic.block.entity.ResearchTableScreen;
 import net.tntim1.psychic.capability.PsychicCapability;
+import net.tntim1.psychic.fluids.ModFluids;
 import net.tntim1.psychic.item.ModCreativeModeTabs;
 import net.tntim1.psychic.item.ModItems;
 import net.tntim1.psychic.network.*;
@@ -58,6 +63,8 @@ public class Psychic
         ModBlocks.register(modEventBus); // Add this
         ModBlockEntities.register(modEventBus); // Add this
         ModMenus.register(modEventBus); // Add this
+        ModFluids.FLUIDS.register(modEventBus);
+        ModFluids.FLUID_TYPES.register(modEventBus);
 
         modEventBus.addListener(this::commonSetup);
         modEventBus.addListener(KeyInit::register);
@@ -125,9 +132,17 @@ public class Psychic
             event.enqueueWork(() -> {
                 // Links the Menu logic to the visual Screen
                 MenuScreens.register(ModMenus.RESEARCH_TABLE_MENU.get(), ResearchTableScreen::new);
+
             });
+
+        }
+        @SubscribeEvent
+        public static void registerRenderers(EntityRenderersEvent.RegisterRenderers event) {
+            event.registerBlockEntityRenderer(ModBlockEntities.AETHER_TANK.get(), AetherTankRenderer::new);
+            ItemBlockRenderTypes.setRenderLayer(ModBlocks.AETHER_TANK.get(), RenderType.translucent());
         }
     }
+
 
     @Mod.EventBusSubscriber(modid = MODID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
     public static class ClientForgeEvents {
@@ -157,4 +172,5 @@ public class Psychic
             }
         }
     }
+
 }
