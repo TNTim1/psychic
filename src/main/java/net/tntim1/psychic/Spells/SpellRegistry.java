@@ -33,7 +33,6 @@ public class SpellRegistry {
                 },  new ResourceLocation("psychic", "textures/gui/widgets/fills/chaos_star.png")
                 , -20, 10f
         ));
-
     }
 
     private static void register(SpellDefinition spell) {

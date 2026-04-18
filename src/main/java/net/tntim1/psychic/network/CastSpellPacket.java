@@ -41,17 +41,18 @@ public class CastSpellPacket {
 
             player.getCapability(PlayerManaProvider.CAP).ifPresent(mana -> {
 
-                // Run spell action
+
+
+                // --- Generic spell action (runs for all spells including force_field) ---
                 if (spell.action != null) spell.action.execute(player);
 
-                // Apply warp
+                // --- Apply warp change ---
                 if (spell.warpChange != 0) {
                     LevelChunk chunk = player.serverLevel().getChunkAt(player.blockPosition());
                     chunk.getCapability(ChunkWarpProvider.CAP).ifPresent(data -> {
                         data.addWarp(spell.warpChange);
                         chunk.setUnsaved(true);
-                        ModPackets.sendToPlayer(
-                                new WarpSyncPacket(data.getWarpStrength()), player);
+                        ModPackets.sendToPlayer(new WarpSyncPacket(data.getWarpStrength()), player);
                     });
                 }
             });

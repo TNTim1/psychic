@@ -14,6 +14,7 @@ import net.tntim1.psychic.network.ModPackets;
 import net.tntim1.psychic.network.SyncKnowledgePacket;
 import net.tntim1.psychic.capability.PsychicData;
 import net.tntim1.psychic.network.SyncSpellHistoryPacket;
+import net.tntim1.psychic.network.SyncTaskProgressPacket;
 import net.tntim1.psychic.player_data.ClientKnowledge;
 
 import java.util.ArrayList;
@@ -70,14 +71,15 @@ public class PsychicCapabilityEventHandler {
         @SubscribeEvent
         public static void onPlayerClone(PlayerEvent.Clone event) {
             event.getOriginal().reviveCaps();
-
-            event.getOriginal().getCapability(PsychicCapability.PSYCHIC_DATA_CAP).ifPresent(oldData ->
-                    event.getEntity().getCapability(PsychicCapability.PSYCHIC_DATA_CAP).ifPresent(newData ->
-                            newData.copyFrom(oldData)
-                    )
-            );
-
-            event.getOriginal().invalidateCaps();
+            try {
+                event.getOriginal().getCapability(PsychicCapability.PSYCHIC_DATA_CAP).ifPresent(oldData ->
+                        event.getEntity().getCapability(PsychicCapability.PSYCHIC_DATA_CAP).ifPresent(newData ->
+                                newData.copyFrom(oldData, event.isWasDeath())
+                        )
+                );
+            } finally {
+                event.getOriginal().invalidateCaps();
+            }
         }
 
         @SubscribeEvent
@@ -93,11 +95,9 @@ public class PsychicCapabilityEventHandler {
         private static void syncToClient(Player player) {
             if (!(player instanceof ServerPlayer sp)) return;
             sp.getCapability(PsychicCapability.PSYCHIC_DATA_CAP).ifPresent(data -> {
-                // 1. Sync general knowledge (for isUnlocked checks)
                 ModPackets.sendToPlayer(new SyncKnowledgePacket(data.getUnlockedIds()), sp);
-
-                // 2. Sync the SPIRAL order (CRITICAL for it to show up after relog)
                 ModPackets.sendToPlayer(new SyncSpellHistoryPacket(data.getUnlockedSpellsOrder()), sp);
+                ModPackets.sendToPlayer(new SyncTaskProgressPacket(data.taskProgress.snapshot()), sp);
             });
         }
     }

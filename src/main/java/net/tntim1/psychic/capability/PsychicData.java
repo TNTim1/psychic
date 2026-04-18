@@ -94,12 +94,21 @@ public class PsychicData {
     }
 
     // --- Survival Fix ---
-    public void copyFrom(PsychicData source) {
+    public void copyFrom(PsychicData source, boolean fromDeath) {
+        // Unlocked widgets always survive death
         this.unlockedIds.clear();
         this.unlockedIds.addAll(source.unlockedIds);
         this.unlockedSpellsOrder.clear();
         this.unlockedSpellsOrder.addAll(source.unlockedSpellsOrder);
-        this.taskProgress.applySnapshot(source.taskProgress.snapshot());
+
+        if (fromDeath) {
+            // Reset task progress on death — counts start over
+            // Remove this block if you want tasks to also persist through death
+            this.taskProgress.applySnapshot(new java.util.HashMap<>());
+        } else {
+            // Dimension travel — copy everything
+            this.taskProgress.applySnapshot(source.taskProgress.snapshot());
+        }
     }
 
     // --- Cascade Logic (Updated to use unlockedIds) ---
